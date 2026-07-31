@@ -1,0 +1,10 @@
+# Wokwi Configuration File
+# Reference: https://docs.wokwi.com/vscode/project-config
+[wokwi]
+version = 1
+firmware = '.pio/build/seeed_xiao_esp32c3/firmware.bin'
+elf = '.pio/build/seeed_xiao_esp32c3/firmware.elf'
+
+[[chip]]
+name = "vl53l1x"
+binary = "chips/vl53l1x.chip.wasm"

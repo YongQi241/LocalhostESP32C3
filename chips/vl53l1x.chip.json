@@ -1,0 +1,15 @@
+{
+  "name": "VL53L1X ToF Sensor",
+  "author": "Starter model",
+  "pins": ["VCC", "GND", "XSHUT", "GPIO1", "SCL", "SDA"],
+  "controls": [
+    {
+      "id": "distanceMm",
+      "label": "Distance (mm)",
+      "type": "range",
+      "min": 40,
+      "max": 4000,
+      "step": 10
+    }
+  ]
+}
