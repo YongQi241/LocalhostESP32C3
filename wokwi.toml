@@ -8,3 +8,7 @@ elf = '.pio/build/seeed_xiao_esp32c3/firmware.elf'
 [[chip]]
 name = "vl53l1x"
 binary = "chips/vl53l1x.chip.wasm"
+
+[[chip]]
+name = "temt6000"
+binary = "chips/temt6000.chip.wasm"

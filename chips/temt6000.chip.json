@@ -1,0 +1,16 @@
+{
+  "name": "temt6000",
+  "author": "Your Name",
+  "pins": ["VCC", "GND", "OUT"],
+  "controls": [
+    {
+      "id": "lux",
+      "type": "range",
+      "label": "Light level (lux)",
+      "attribute": "lux",
+      "min": 0,
+      "max": 2000,
+      "value": 500
+    }
+  ]
+}
