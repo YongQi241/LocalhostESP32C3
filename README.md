@@ -127,13 +127,54 @@ bytes (`MQTT_MAX_PACKET_SIZE` in main.cpp) to match. A message with all
 5 zones plus distance_mm, light, and awake_ms comfortably fits. If you
 push that further, raise both numbers together.
 
-## Related topic (read only)
+Subscribing to the device's messages
 
-The device also publishes its own readings, this is not something you
-send to, just something you can subscribe to for reference:
+Two topics carry information out of the device:
 
-```
-xiao/esp32c3/sensors/data
-```
+xiao/esp32c3/sensors/data, the sensor readings, published every time the device wakes up and connects. Not retained, so a new subscriber only sees new readings from that point on, not the last one that was sent.
+xiao/esp32c3/sensors/threshold, the same settings topic described above. It is retained, so subscribing to it (even without publishing anything yourself) immediately gets you the last settings that were sent, which is a handy way to check what is currently active.
+Quick look with mosquitto_sub
+mosquitto_sub -h broker.hivemq.com -t xiao/esp32c3/sensors/data -v
 
-Example payload: `{"distance_mm":280,"light":512,"wake":42}`
+The -v flag prints the topic name alongside each message, useful once you subscribe to more than one topic at a time, for example with a wildcard that covers both:
+
+mosquitto_sub -h broker.hivemq.com -t "xiao/esp32c3/sensors/#" -v
+Parsing the payloads
+
+Both topics carry a plain JSON object with no extra framing, so any MQTT client library plus a JSON parser is enough to read them.
+
+Data topic fields:
+
+distance_mm, unsigned integer, latest distance reading in millimeters.
+light, integer, latest raw light sensor reading.
+wake, unsigned integer, a wake cycle counter. If it jumps by more than 1 between messages you received, a wake happened that never made it to the broker, useful for spotting dropped connectivity.
+
+Threshold topic fields: the same distance_mm, light, awake_ms, and zones fields described earlier in this document. This topic only carries a message when someone publishes a setting change, or when the broker replays the retained value to a client that just subscribed.
+
+Example subscriber in Python, using paho-mqtt:
+
+python
+import json
+import paho.mqtt.client as mqtt
+
+def on_message(client, userdata, msg):
+    try:
+        payload = json.loads(msg.payload)
+    except json.JSONDecodeError:
+        print(f"Could not parse message on {msg.topic}: {msg.payload!r}")
+        return
+
+    if msg.topic.endswith("/data"):
+        print(f"Distance: {payload.get('distance_mm')} mm, "
+              f"Light: {payload.get('light')}, "
+              f"Wake: {payload.get('wake')}")
+    elif msg.topic.endswith("/threshold"):
+        print(f"Current settings: {payload}")
+
+client = mqtt.Client()
+client.on_message = on_message
+client.connect("broker.hivemq.com", 1883)
+client.subscribe("xiao/esp32c3/sensors/#")
+client.loop_forever()
+
+Example data topic payload: {"distance_mm":280,"light":512,"wake":42}
