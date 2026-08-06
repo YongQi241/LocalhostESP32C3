@@ -22,3 +22,118 @@ Linux/Windows: Ctrl+Shift+P
 macOS: Cmd+Shift+P
 Run:
 Wokwi: Start Simulator
+
+
+# Live MQTT Settings
+
+The device listens for one retained MQTT message that can change its
+behavior on the fly, no reflashing needed. This document explains how that
+works.
+
+## Topic
+
+```
+xiao/esp32c3/sensors/threshold
+```
+
+This is the same topic name as the constant `MQTT_TOPIC_THRESHOLD` in
+`main.cpp`. The device subscribes to it every time it wakes up and connects
+to the broker.
+
+## How to send a setting
+
+Publish a JSON object to the topic above. Use the retain flag so the
+setting survives broker restarts and gets picked up again if the device
+reboots.
+
+```
+mosquitto_pub -h broker.hivemq.com -r -t xiao/esp32c3/sensors/threshold \
+    -m '{"distance_mm":50,"light":100,"awake_ms":5000}'
+```
+
+You do not need to send every field at once. Any subset is fine, only the
+fields you include get changed, everything else keeps its current value.
+
+## Fields
+
+### distance_mm
+
+Distance delta, in millimeters, that counts as a "sudden change" for the
+distance sensor. If the reading jumps by more than this amount between
+wakes, the device treats it as sudden.
+
+Default: 100
+
+### light
+
+Light reading delta, in raw ADC counts, that counts as a "sudden change"
+for the light sensor. Same idea as distance_mm, just for light.
+
+Default: 200
+
+### awake_ms
+
+How long, in milliseconds, the device stays awake and watching after the
+last sudden change before it goes back to deep sleep. This is an idle
+timeout, not a fixed window, so every additional sudden change resets the
+clock.
+
+Default: 3000
+
+### zones
+
+An array of distance zones, each one a label plus a cutoff. This is what
+turns a raw distance reading into a message like "Close!" or "Far..".
+
+```
+{"zones":[{"max_mm":300,"label":"Close!"},
+          {"max_mm":600,"label":"Medium"},
+          {"max_mm":65535,"label":"Far.."}]}
+```
+
+Rules for this field:
+
+- List zones in ascending order by `max_mm`.
+- The last zone in the list always acts as the catch all for anything
+  beyond it, so its own `max_mm` value barely matters as long as it is the
+  largest one, a value like 65535 is a safe choice.
+- Sending a `zones` array replaces the whole table, not just the entries
+  you list. If you send 2 zones, the device now has 2 zones, the previous
+  ones are gone.
+- Up to 5 zones are kept (`MAX_ZONES` in main.cpp). Extra entries beyond
+  that are ignored, with a note in the serial log.
+- Each label can be up to 23 characters (`ZONE_LABEL_LEN - 1` in
+  main.cpp), longer labels get cut off.
+- Entries missing `max_mm` or `label` are skipped rather than rejecting
+  the whole message.
+
+Default zones: under 300mm is "Close!", anything past that is "Far..".
+
+## What happens when a setting changes
+
+- The device applies the change immediately and keeps it in RTC memory, so
+  it survives deep sleep (but not a full power loss or reflash).
+- The onboard LED blinks 3 times as a visual confirmation that a change
+  was picked up.
+- Changing `zones` also resets the device's memory of which zone it was
+  last in, so the very next reading gets freshly evaluated against the new
+  table and reported, even if the actual distance has not moved.
+
+## Payload size
+
+The parser reserves 512 bytes for the incoming JSON (`StaticJsonDocument`
+in `mqttCallback()`), and the MQTT packet limit is also raised to 512
+bytes (`MQTT_MAX_PACKET_SIZE` in main.cpp) to match. A message with all
+5 zones plus distance_mm, light, and awake_ms comfortably fits. If you
+push that further, raise both numbers together.
+
+## Related topic (read only)
+
+The device also publishes its own readings, this is not something you
+send to, just something you can subscribe to for reference:
+
+```
+xiao/esp32c3/sensors/data
+```
+
+Example payload: `{"distance_mm":280,"light":512,"wake":42}`
