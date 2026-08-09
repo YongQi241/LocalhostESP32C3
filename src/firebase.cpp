@@ -1,18 +1,17 @@
 #include "firebase.h"
 #include "env_config.h"
 #include "state.h"
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
-void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange) {
+void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange, bool switchOn) {
   WiFiClientSecure client;
-  client.setInsecure(); // prototype-friendly; pin Firebase's root CA for production use
+  client.setInsecure(); // pin Firebase's root CA for production use
 
   HTTPClient http;
-  char url[256]; // sized for the longest FIREBASE_HOST/FIREBASE_AUTH the buffers above can hold
-  snprintf(url, sizeof(url),
-      "https://%s/readings/latest.json?auth=%s",
-      FIREBASE_HOST, FIREBASE_AUTH);
+  const String url = String("https://") + FIREBASE_HOST
+      + "/readings/latest.json?auth=" + FIREBASE_AUTH;
 
   if (!http.begin(client, url)) {
     Serial.println("Firebase: begin() failed.");
@@ -21,10 +20,15 @@ void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange) {
 
   http.addHeader("Content-Type", "application/json");
 
-  char body[192];
-  snprintf(body, sizeof(body),
-      "{\"distance_mm\":%u,\"light\":%d,\"sudden_change\":%s,\"wake\":%lu}",
-      distanceMM, lightRaw, suddenChange ? "true" : "false", (unsigned long)wakeCount);
+  JsonDocument doc;
+  doc["distance_mm"] = distanceMM;
+  doc["light"] = lightRaw;
+  doc["sudden_change"] = suddenChange;
+  doc["switch_on"] = switchOn;
+  doc["wake"] = wakeCount;
+
+  String body;
+  serializeJson(doc, body);
 
   const int status = http.PUT(body);
   if (status > 0) {

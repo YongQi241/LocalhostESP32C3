@@ -38,21 +38,12 @@ bool connectMQTT()
   mqttClient.setCallback(mqttCallback);
   mqttClient.setSocketTimeout(3);
 
-  char clientId[32];
-  snprintf(clientId, sizeof(clientId), "xiao-c3-%08lx", (unsigned long)esp_random());
-
-  // If MQTT_USERNAME is set in .env, connect with broker-level login
-  // instead of anonymously - the real fix for "who can connect at all"
-  // if you're on a broker that supports per-account credentials (the
-  // public HiveMQ test broker used by default here does not).
-  const bool useAuth = (MQTT_USERNAME[0] != '\0');
+  const String clientId = "xiao-c3-" + String(esp_random(), HEX);
 
   const uint32_t start = millis();
   while (!mqttClient.connected() && millis() - start < MQTT_CONNECT_TIMEOUT_MS)
   {
-    const bool ok = useAuth
-                    ? mqttClient.connect(clientId, MQTT_USERNAME, MQTT_PASSWORD)
-                    : mqttClient.connect(clientId);
+    const bool ok = mqttClient.connect(clientId.c_str());
     if (ok)
     {
       Serial.println("MQTT connected.");
@@ -68,12 +59,12 @@ bool connectMQTT()
 
 void mqttCallback(char *topic, byte *payload, unsigned int length)
 {
-  if (strcmp(topic, MQTT_TOPIC_THRESHOLD) != 0)
+  if (MQTT_TOPIC_THRESHOLD != topic)
   {
     return;
   }
 
-  StaticJsonDocument<512> doc; // large enough for distance_mm/light/awake_ms plus a MAX_ZONES-entry "zones" array
+  JsonDocument doc;
   const DeserializationError err = deserializeJson(doc, payload, length);
   if (err)
   {
@@ -86,8 +77,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
   Access control: only accept this command if it carries the correct 
   shared key. Anyone can technically subscribe/publish to a topic on a
   public broker, but without this key they cannot make the device act
-  on what they send. If MQTT_ACCESS_KEY is left blank in .env, the
-  check is skipped
+  on what they send. If MQTT_ACCESS_KEY is blank, the check is skipped.
   */
 
   if (MQTT_ACCESS_KEY[0] != '\0')
@@ -102,7 +92,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
 
   bool changed = false;
 
-  if (doc.containsKey("distance_mm"))
+  if (doc["distance_mm"].is<uint16_t>())
   {
     const uint16_t v = doc["distance_mm"].as<uint16_t>();
     if (v != distanceThresholdMM)
@@ -111,7 +101,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
       changed = true;
     }
   }
-  if (doc.containsKey("light"))
+  if (doc["light"].is<int>())
   {
     const int v = doc["light"].as<int>();
     if (v != lightThreshold)
@@ -120,7 +110,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
       changed = true;
     }
   }
-  if (doc.containsKey("awake_ms"))
+  if (doc["awake_ms"].is<uint32_t>())
   {
     const uint32_t v = doc["awake_ms"].as<uint32_t>();
     if (v != awakeDurationMs)
@@ -129,10 +119,10 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
       changed = true;
     }
   }
-  if (doc.containsKey("zones"))
+  if (doc["zones"].is<JsonArray>())
   {
     JsonArray arr = doc["zones"].as<JsonArray>();
-    uint8_t newCount = 0;
+    int newCount = 0;
     for (JsonObject z : arr)
     {
       if (newCount >= MAX_ZONES)
@@ -140,9 +130,9 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
         Serial.println("Zones message has more entries than MAX_ZONES - extra ones ignored.");
         break;
       }
-      if (!z.containsKey("max_mm") || !z.containsKey("label"))
+      if (!z["max_mm"].is<uint16_t>() || !z["label"].is<const char *>())
       {
-        continue; // skip malformed entries rather than aborting the whole update
+        continue; // skip malformed entries
       }
       zoneMaxMM[newCount] = z["max_mm"].as<uint16_t>();
       strlcpy(zoneLabel[newCount], z["label"].as<const char *>(), ZONE_LABEL_LEN);
@@ -151,7 +141,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
     if (newCount > 0)
     {
       zoneCount = newCount;
-      lastZoneIndex = -1; // re-evaluate against the new table, don't assume the old zone still lines up
+      lastZoneIndex = -1; // re-evaluate against the new table, incase the old zone don't line up
       changed = true;
     }
     else
@@ -168,21 +158,22 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
   }
 }
 
-void publishReadingsMQTT(uint16_t distanceMM, int lightRaw)
+void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn)
 {
-  // "id" and "key" let a receiver confirm the message actually came from
-  // this device (matching MQTT_DEVICE_ID/MQTT_ACCESS_KEY from .env)
-  // rather than from something else that guessed the topic name.
-  char payload[256];
-  snprintf(payload, sizeof(payload),
-  "{\"id\":\"%s\",\"key\":\"%s\",\"distance_mm\":%u,\"light\":%d,\"wake\":%lu}",
-  MQTT_DEVICE_ID, MQTT_ACCESS_KEY, distanceMM, lightRaw, (unsigned long)wakeCount);
+  // "id" and "key" for receiver confirmation of exact device.
+  JsonDocument doc;
+  doc["id"] = MQTT_DEVICE_ID;
+  doc["key"] = MQTT_ACCESS_KEY;
+  doc["distance_mm"] = distanceMM;
+  doc["light"] = lightRaw;
+  doc["switch_on"] = switchOn;
+  doc["wake"] = wakeCount;
 
-  // retained=true: the broker holds this message and hands it straight
-  // to the next client that subscribes, even long after this publish -
-  // so an account that connects late still sees the last known reading
-  // instead of nothing until the next wake.
-  if (mqttClient.publish(MQTT_TOPIC_DATA, payload, true))
+  String payload;
+  serializeJson(doc, payload);
+
+  // the broker holds the message and hands it to the next subscriber, even long afterpublish --> a late connection can sees the recent reading instead of nothing
+  if (mqttClient.publish(MQTT_TOPIC_DATA.c_str(), payload.c_str(), true))
   {
     Serial.print("MQTT published (retained): ");
     Serial.println(payload);

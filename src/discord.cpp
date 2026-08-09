@@ -1,12 +1,13 @@
 #include "discord.h"
 #include "env_config.h"
 #include "zones.h"
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
-void sendDiscordAlert(uint16_t distanceMM, uint8_t zoneIndex, int lightRaw, int lightDelta) {
+void sendDiscordAlert(uint16_t distanceMM, int zoneIndex, int lightRaw, int lightDelta) {
   WiFiClientSecure client;
-  client.setInsecure(); // prototype-friendly; pin Discord's root CA for production use
+  client.setInsecure(); // pin Discord's root CA for production use
 
   HTTPClient http;
   if (!http.begin(client, DISCORD_WEBHOOK_URL)) {
@@ -16,10 +17,14 @@ void sendDiscordAlert(uint16_t distanceMM, uint8_t zoneIndex, int lightRaw, int 
 
   http.addHeader("Content-Type", "application/json");
 
-  char content[224];
-  snprintf(content, sizeof(content),
-      "{\"content\":\"%s (%u mm) | Light: %d (change %d)\"}",
-      zoneLabel[zoneIndex], distanceMM, lightRaw, lightDelta);
+  const String message = String(zoneLabel[zoneIndex]) + " (" + distanceMM
+      + " mm) | Light: " + lightRaw + " (change " + lightDelta + ")";
+
+  JsonDocument doc;
+  doc["content"] = message;
+
+  String content;
+  serializeJson(doc, content);
 
   const int status = http.POST(content);
   if (status > 0) {

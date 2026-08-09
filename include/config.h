@@ -15,11 +15,11 @@ constexpr uint32_t HEARTBEAT_EVERY_N_WAKES = 30;                  // ~60s @ 2s i
 constexpr uint32_t WIFI_CONNECT_TIMEOUT_MS = 8000;
 constexpr uint32_t MQTT_CONNECT_TIMEOUT_MS = 4000;
 constexpr uint32_t ACTIVE_LOOP_DELAY_MS    = 250;                 // how often we re-check sensors during the awake window
-constexpr uint8_t  SETTINGS_BLINK_COUNT    = 3;                   // LED blinks to confirm a threshold/awake setting change
+constexpr int      SETTINGS_BLINK_COUNT    = 3;                   // LED blinks to confirm a threshold/awake setting change
 constexpr uint16_t SETTINGS_BLINK_MS       = 100;                 // on/off duration per blink
 
 // ---------------- Distance zones ----------------
-constexpr uint8_t  MAX_ZONES      = 5;   // cap on how many zones the "zones" MQTT field can set
-constexpr uint8_t  ZONE_LABEL_LEN = 24;  // max chars per zone label, including the null terminator
+constexpr int      MAX_ZONES      = 5;   // cap on how many zones the "zones" MQTT field can set
+constexpr int      ZONE_LABEL_LEN = 24;  // max chars per zone label, including the null terminator
 
 #endif // CONFIG_H

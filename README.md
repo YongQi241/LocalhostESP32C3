@@ -1,5 +1,9 @@
 # Build the Project
 
+Set the WiFi, MQTT, Firebase, and Discord values in
+`src/env_config.cpp` before building. These settings are compiled into
+the firmware.
+
 Using the PlatformIO toolbar in VS Code, select Build.
 
 Alternatively, run:
@@ -121,11 +125,10 @@ Default zones: under 300mm is "Close!", anything past that is "Far..".
 
 ## Payload size
 
-The parser reserves 512 bytes for the incoming JSON (`StaticJsonDocument`
-in `mqttCallback()`), and the MQTT packet limit is also raised to 512
-bytes (`MQTT_MAX_PACKET_SIZE` in main.cpp) to match. A message with all
-5 zones plus distance_mm, light, and awake_ms comfortably fits. If you
-push that further, raise both numbers together.
+The MQTT packet limit is 512 bytes (`MQTT_MAX_PACKET_SIZE` in
+`network.h`). A message with all 5 zones plus distance_mm, light, and
+awake_ms comfortably fits. Raise that limit if the accepted payload
+format grows beyond it.
 
 Subscribing to the device's messages
 
@@ -147,6 +150,8 @@ Data topic fields:
 
 distance_mm, unsigned integer, latest distance reading in millimeters.
 light, integer, latest raw light sensor reading.
+switch_on, boolean, current slide-switch state. The device sends one final
+false value before sleeping when the switch is turned off.
 wake, unsigned integer, a wake cycle counter. If it jumps by more than 1 between messages you received, a wake happened that never made it to the broker, useful for spotting dropped connectivity.
 
 Threshold topic fields: the same distance_mm, light, awake_ms, and zones fields described earlier in this document. This topic only carries a message when someone publishes a setting change, or when the broker replays the retained value to a client that just subscribed.

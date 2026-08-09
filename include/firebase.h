@@ -3,8 +3,7 @@
 
 #include <Arduino.h>
 
-// Writes the given reading to Firebase Realtime Database, using
-// FIREBASE_HOST/FIREBASE_AUTH from env_config.h.
-void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange);
+// Writes the given reading and switch state to Firebase Realtime Database.
+void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange, bool switchOn);
 
 #endif // FIREBASE_H
