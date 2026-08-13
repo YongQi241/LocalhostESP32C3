@@ -1,0 +1,918 @@
+[
+    {
+        "id": "dc67bc384f2f408d",
+        "type": "tab",
+        "label": "Flow 2",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "de5fbdf6cbf55a4b",
+        "type": "function",
+        "z": "dc67bc384f2f408d",
+        "name": "function 2",
+        "func": "// 1. Kiểm tra tính hợp lệ của dữ liệu đầu vào từ Firebase\nif (!msg.payload || typeof msg.payload !== 'object') {\n    msg.payload = []; // Trả về mảng rỗng nếu Cloud chưa có dữ liệu\n    return msg;\n}\n\nlet deviceArray = [];\nlet counter = 1;\n\n// 2. Lặp qua các node thiết bị (JSON Object) lấy từ Firebase\nfor (let key in msg.payload) {\n    let rawData = msg.payload[key];\n    \n    // 3. Chuẩn hóa dữ liệu theo đúng cấu trúc giao diện cần thiết\n    let deviceObj = {\n        // Tạo STT dạng 01, 02... Nếu không có tên thì để dấu \"?\" theo thiết kế\n        index: rawData.name ? (counter < 10 ? \"0\" + counter : counter.toString()) : \"?\",\n        \n        id: rawData.id || key,                          // Request ID (vd: C3-A19F)\n        name: rawData.name || \"Unknown ESP Signal\",     // Tên thiết bị\n        status: rawData.status || \"Weak signal\",        // Trạng thái ghép nối\n        rssi: rawData.rssi || -100,                     // Cường độ sóng đo từ mạch\n        \n        // 4. Logic CSS tự động phân loại màu sắc Badge\n        badgeClass: (rawData.status === \"Pairing mode\") ? \"new-request\" : \"verify\",\n        badgeText: (rawData.status === \"Pairing mode\") ? \"New request\" : \"Verify carefully\"\n    };\n    \n    deviceArray.push(deviceObj);\n    counter++;\n}\n\n// 5. Ghi đè dữ liệu ra thành dạng Mảng (Array) để UI Template xử lý\nmsg.payload = deviceArray;\nreturn msg;",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 380,
+        "wires": [
+            [
+                "93a54299133d8856",
+                "1354bc062530ac21"
+            ]
+        ]
+    },
+    {
+        "id": "cb9fdb1431e61b6f",
+        "type": "comment",
+        "z": "dc67bc384f2f408d",
+        "name": "lấy device_id, status, RSSI ( wifi.rssi() )",
+        "info": "",
+        "x": 570,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "93a54299133d8856",
+        "type": "ui-template",
+        "z": "dc67bc384f2f408d",
+        "group": "659cdfece579033f",
+        "page": "",
+        "ui": "",
+        "name": "ui template",
+        "order": 3,
+        "width": 0,
+        "height": 0,
+        "head": "",
+        "format": "<style>\n    /* Biến toàn cục định hình phong cách */\n    :root {\n        --bg-app: #f4f5f7;\n        --bg-card: #ffffff;\n        --text-dark: #111827;\n        --text-gray: #6b7280;\n        --border-radius-lg: 16px;\n        --border-radius-sm: 8px;\n        --badge-green-bg: #d1fae5;\n        --badge-green-text: #065f46;\n        --badge-yellow-bg: #fef3c7;\n        --badge-yellow-text: #92400e;\n    }\n\n    /* Vùng chứa tổng thể */\n    .iot-mobile-container {\n        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;\n        background-color: var(--bg-app);\n        padding: 12px;\n        max-width: 500px;\n        margin: auto;\n    }\n\n    /* Thiết kế thẻ thiết bị (Device Card) */\n    .device-card {\n        background-color: var(--bg-card);\n        border: 1px solid #e5e7eb;\n        border-radius: var(--border-radius-lg);\n        padding: 16px;\n        margin-bottom: 12px;\n        display: flex;\n        align-items: center;\n        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);\n        transition: transform 0.2s;\n    }\n\n    /* Biểu tượng / STT bên trái */\n    .device-icon {\n        background-color: #f3f4f6;\n        border-radius: var(--border-radius-sm);\n        padding: 12px 16px;\n        font-weight: 600;\n        color: var(--text-dark);\n        margin-right: 16px;\n    }\n\n    /* Thông tin chính giữa */\n    .device-info {\n        flex-grow: 1;\n    }\n\n    .device-name {\n        font-size: 16px;\n        font-weight: 600;\n        color: var(--text-dark);\n        margin: 0 0 4px 0;\n    }\n\n    .device-meta {\n        font-size: 12px;\n        color: var(--text-gray);\n        margin: 0 0 8px 0;\n    }\n\n    /* Nhãn trạng thái (Badge) */\n    .badge {\n        display: inline-block;\n        padding: 2px 8px;\n        font-size: 11px;\n        font-weight: 500;\n        border-radius: 12px;\n    }\n\n    .badge.new-request {\n        background-color: var(--badge-green-bg);\n        color: var(--badge-green-text);\n    }\n\n    .badge.verify {\n        background-color: var(--badge-yellow-bg);\n        color: var(--badge-yellow-text);\n    }\n\n    /* Tín hiệu sóng (RSSI) bên phải */\n    .device-signal {\n        font-size: 13px;\n        font-weight: 500;\n        color: var(--text-gray);\n        text-align: right;\n    }\n\n    /* Trạng thái không có thiết bị */\n    .empty-state {\n        text-align: center;\n        padding: 24px;\n        color: var(--text-gray);\n        font-size: 14px;\n    }\n</style>\n\n<!-- Giao diện HTML áp dụng CSS và Data thật -->\n<div class=\"iot-mobile-container\">\n\n    <!-- Hiển thị khi chưa nhận được dữ liệu (mảng rỗng hoặc undefined) -->\n    <div class=\"empty-state\" ng-if=\"!msg.payload || msg.payload.length === 0\">\n        Đang quét tìm thiết bị ESP32-C3...\n    </div>\n\n    <!-- Tự động lặp sinh thẻ khi có dữ liệu thật (ng-repeat) -->\n    <div class=\"device-card\" ng-repeat=\"device in msg.payload\">\n        <div class=\"device-icon\">{{ device.index }}</div>\n\n        <div class=\"device-info\">\n            <h4 class=\"device-name\">{{ device.name }}</h4>\n            <p class=\"device-meta\">Request ID: {{ device.id }} · {{ device.status }}</p>\n            <span class=\"badge {{ device.badgeClass }}\">{{ device.badgeText }}</span>\n        </div>\n\n        <div class=\"device-signal\">\n            {{ device.rssi }} dBm <br/> 📶\n        </div>\n    </div>\n\n</div>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 790,
+        "y": 380,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "32583b81c0cb2cf5",
+        "type": "ui-chart",
+        "z": "dc67bc384f2f408d",
+        "group": "8d93d2da5b7b38e6",
+        "name": "temt 6000",
+        "label": "chart",
+        "order": 3,
+        "chartType": "line",
+        "category": "light",
+        "categoryType": "str",
+        "xAxisLabel": "",
+        "xAxisProperty": "",
+        "xAxisPropertyType": "timestamp",
+        "xAxisType": "time",
+        "xAxisFormat": "",
+        "xAxisFormatType": "auto",
+        "xmin": "",
+        "xmax": "",
+        "yAxisLabel": "",
+        "yAxisProperty": "payload.light",
+        "yAxisPropertyType": "msg",
+        "ymin": "0",
+        "ymax": "4096",
+        "bins": 10,
+        "action": "append",
+        "stackSeries": false,
+        "pointShape": "circle",
+        "pointRadius": 4,
+        "showLegend": true,
+        "removeOlder": "3",
+        "removeOlderUnit": "3600",
+        "removeOlderPoints": "",
+        "colors": [
+            "#0095ff",
+            "#ff0000",
+            "#ff7f0e",
+            "#2ca02c",
+            "#a347e1",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "textColor": [
+            "#666666"
+        ],
+        "textColorDefault": true,
+        "gridColor": [
+            "#e5e5e5"
+        ],
+        "gridColorDefault": true,
+        "width": 6,
+        "height": 8,
+        "className": "",
+        "interpolation": "linear",
+        "x": 800,
+        "y": 540,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "421b65864921484b",
+        "type": "ui-text",
+        "z": "dc67bc384f2f408d",
+        "group": "8d93d2da5b7b38e6",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "name": "vl53l1x",
+        "label": "Distance: ",
+        "format": "{{msg.payload}}",
+        "layout": "row-left",
+        "style": false,
+        "font": "",
+        "fontSize": 16,
+        "color": "#717171",
+        "wrapText": false,
+        "className": "",
+        "value": "payload",
+        "valueType": "msg",
+        "x": 780,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "f775422da7d29286",
+        "type": "ui-switch",
+        "z": "dc67bc384f2f408d",
+        "name": "switch for led",
+        "label": "Led Switch",
+        "group": "659cdfece579033f",
+        "order": 2,
+        "width": "1",
+        "height": "1",
+        "passthru": false,
+        "decouple": false,
+        "topic": "topic",
+        "topicType": "msg",
+        "style": "",
+        "className": "",
+        "layout": "row-spread",
+        "clickableArea": "switch",
+        "onvalue": "true",
+        "onvalueType": "bool",
+        "onicon": "",
+        "oncolor": "",
+        "offvalue": "false",
+        "offvalueType": "bool",
+        "officon": "",
+        "offcolor": "",
+        "x": 270,
+        "y": 800,
+        "wires": [
+            [
+                "d84801a1bef8a76c",
+                "aa03860dbe2cf20d"
+            ]
+        ]
+    },
+    {
+        "id": "d84801a1bef8a76c",
+        "type": "firebase-out",
+        "z": "dc67bc384f2f408d",
+        "name": "control led",
+        "database": "4d86e51837b4a911",
+        "path": "control/xiao01/led",
+        "pathType": "str",
+        "priority": "1",
+        "queryType": "set",
+        "x": 810,
+        "y": 780,
+        "wires": []
+    },
+    {
+        "id": "6b162d75d18ff5d2",
+        "type": "switch",
+        "z": "dc67bc384f2f408d",
+        "name": "",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 450,
+        "y": 940,
+        "wires": [
+            [
+                "09611ab45f506ceb"
+            ]
+        ]
+    },
+    {
+        "id": "09611ab45f506ceb",
+        "type": "template",
+        "z": "dc67bc384f2f408d",
+        "name": "",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "handlebars",
+        "syntax": "mustache",
+        "template": "This is the payload: {{payload}} !",
+        "output": "str",
+        "x": 620,
+        "y": 940,
+        "wires": [
+            [
+                "d1f634992f8b8e7d"
+            ]
+        ]
+    },
+    {
+        "id": "d1f634992f8b8e7d",
+        "type": "http request",
+        "z": "dc67bc384f2f408d",
+        "name": "",
+        "method": "GET",
+        "ret": "txt",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 810,
+        "y": 940,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "db7fbb6c660ee3de",
+        "type": "comment",
+        "z": "dc67bc384f2f408d",
+        "name": "luồng thông tin thiết bị",
+        "info": "",
+        "x": 180,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "e40e5d577819874a",
+        "type": "comment",
+        "z": "dc67bc384f2f408d",
+        "name": "vẽ biễu đồ / in data",
+        "info": "",
+        "x": 190,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "5171a64a0cfabcec",
+        "type": "comment",
+        "z": "dc67bc384f2f408d",
+        "name": "công tắc cảnh báo đèn",
+        "info": "",
+        "x": 200,
+        "y": 740,
+        "wires": []
+    },
+    {
+        "id": "90b3ecf6b8946c38",
+        "type": "comment",
+        "z": "dc67bc384f2f408d",
+        "name": "push notification",
+        "info": "",
+        "x": 200,
+        "y": 900,
+        "wires": []
+    },
+    {
+        "id": "f598350562fce055",
+        "type": "comment",
+        "z": "dc67bc384f2f408d",
+        "name": "refresh",
+        "info": "",
+        "x": 150,
+        "y": 160,
+        "wires": []
+    },
+    {
+        "id": "d1f12bb5d8d9db87",
+        "type": "ui-button",
+        "z": "dc67bc384f2f408d",
+        "group": "659cdfece579033f",
+        "name": "refresh",
+        "label": " ",
+        "order": 1,
+        "width": "1",
+        "height": "1",
+        "emulateClick": false,
+        "tooltip": "",
+        "color": "",
+        "bgcolor": "",
+        "className": "",
+        "icon": "refresh",
+        "iconPosition": "left",
+        "payload": "",
+        "payloadType": "str",
+        "topic": "topic",
+        "topicType": "msg",
+        "buttonColor": "",
+        "textColor": "",
+        "iconColor": "",
+        "enableClick": true,
+        "enablePointerdown": false,
+        "pointerdownPayload": "",
+        "pointerdownPayloadType": "str",
+        "enablePointerup": false,
+        "pointerupPayload": "",
+        "pointerupPayloadType": "str",
+        "x": 200,
+        "y": 240,
+        "wires": [
+            [
+                "2b1e76347060e29b"
+            ]
+        ]
+    },
+    {
+        "id": "bcd6e1d11bdcdb58",
+        "type": "ui-text",
+        "z": "dc67bc384f2f408d",
+        "group": "8d93d2da5b7b38e6",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "name": "temt 6000",
+        "label": "Light level: ",
+        "format": "{{msg.payload}}",
+        "layout": "row-left",
+        "style": false,
+        "font": "",
+        "fontSize": 16,
+        "color": "#717171",
+        "wrapText": false,
+        "className": "",
+        "value": "payload",
+        "valueType": "msg",
+        "x": 800,
+        "y": 500,
+        "wires": []
+    },
+    {
+        "id": "28c9fdcda334c286",
+        "type": "ui-form",
+        "z": "dc67bc384f2f408d",
+        "name": "chỉnh thông số",
+        "group": "896274f034967315",
+        "label": "edit setting",
+        "order": 1,
+        "width": "6",
+        "height": "5",
+        "options": [
+            {
+                "label": "Ngưỡng ánh sáng (lux)",
+                "key": "light_threshold",
+                "type": "number",
+                "required": true,
+                "rows": null
+            },
+            {
+                "label": "Ngưỡng khoảng cách (cm)",
+                "key": "distance_threshold",
+                "type": "number",
+                "required": true,
+                "rows": null
+            }
+        ],
+        "formValue": {
+            "light_threshold": "",
+            "distance_threshold": ""
+        },
+        "payload": "",
+        "submit": "Comfirm and send setting",
+        "cancel": "clear",
+        "resetOnSubmit": false,
+        "topic": "topic",
+        "topicType": "msg",
+        "splitLayout": false,
+        "className": "",
+        "passthru": false,
+        "dropdownOptions": [],
+        "x": 180,
+        "y": 1080,
+        "wires": [
+            [
+                "ab8378d74e89ec40",
+                "60a982046890cc8b"
+            ]
+        ]
+    },
+    {
+        "id": "ab8378d74e89ec40",
+        "type": "function",
+        "z": "dc67bc384f2f408d",
+        "name": "function 3",
+        "func": "// // 1. Lấy ID thiết bị đang được chọn\n// let currentId = flow.get(\"active_device_id\");\n\n// if (!currentId) {\n//     node.warn(\"Lỗi: Chưa chọn thiết bị!\");\n//     return null; // Ngắt luồng nếu không có ID\n// }\n\n// // 2. Tạo đường dẫn lưu cấu hình riêng cho ID đó\n// msg.topic = currentId + \"/settings\";\n\nlet currentId = \"xiao01\"; //id esp32\n\nmsg.topic = \"xiao/esp32c3/sensors/\" + currentId + \"/threshold\";\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 1100,
+        "wires": [
+            [
+                "79bec81b6c2bfd1e",
+                "d4f9faeeae53db21"
+            ]
+        ]
+    },
+    {
+        "id": "79bec81b6c2bfd1e",
+        "type": "firebase-out",
+        "z": "dc67bc384f2f408d",
+        "name": "threshold",
+        "database": "4d86e51837b4a911",
+        "path": "settings/xiao01/threshold",
+        "pathType": "str",
+        "priority": "1",
+        "queryType": "set",
+        "x": 560,
+        "y": 1100,
+        "wires": []
+    },
+    {
+        "id": "1b5aa022b5cc4070",
+        "type": "ui-template",
+        "z": "dc67bc384f2f408d",
+        "group": "",
+        "page": "",
+        "ui": "f7e8e1d52d7c7ca1",
+        "name": "",
+        "order": 1,
+        "width": 0,
+        "height": 0,
+        "head": "",
+        "format": "<style>\n    #auth-overlay {\n        position: fixed;\n        top: 0;\n        left: 0;\n        width: 100vw;\n        height: 100vh;\n        background-color: #f4f5f7;\n        z-index: 99999;\n        display: flex;\n        justify-content: center;\n        align-items: center;\n        font-family: 'Inter', sans-serif;\n    }\n\n    .auth-card {\n        background: white;\n        padding: 32px;\n        border-radius: 16px;\n        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n        width: 100%;\n        max-width: 360px;\n        text-align: center;\n    }\n\n    .auth-input {\n        width: 100%;\n        padding: 12px;\n        margin: 8px 0 16px 0;\n        border: 1px solid #d1d5db;\n        border-radius: 8px;\n        box-sizing: border-box;\n    }\n\n    .auth-btn {\n        width: 100%;\n        padding: 12px;\n        background-color: #111827;\n        color: white;\n        border: none;\n        border-radius: 8px;\n        font-weight: 600;\n        cursor: pointer;\n    }\n\n    .auth-error {\n        color: #dc2626;\n        font-size: 14px;\n        margin-top: 12px;\n        display: none;\n    }\n\n    #logout-btn {\n        position: fixed;\n        top: 16px;\n        right: 16px;\n        z-index: 99998;\n        padding: 8px 16px;\n        background-color: #ef4444;\n        color: white;\n        border: none;\n        border-radius: 8px;\n        cursor: pointer;\n        display: none;\n    }\n</style>\n\n<!-- ĐÃ THÊM THUỘC TÍNH onclick ĐỂ ĐẢM BẢO NÚT LUÔN HOẠT ĐỘNG -->\n<div id=\"auth-overlay\">\n    <div class=\"auth-card\">\n        <h2>Đăng nhập Hệ thống</h2>\n        <p style=\"color: #6b7280; font-size: 14px; margin-bottom: 24px;\">Thiết bị theo dõi không gian</p>\n        <input type=\"email\" id=\"email\" class=\"auth-input\" placeholder=\"Email\" required>\n        <input type=\"password\" id=\"password\" class=\"auth-input\" placeholder=\"Mật khẩu\" required>\n\n        <button id=\"login-btn\" class=\"auth-btn\" onclick=\"window.doLogin()\">Xác thực Token</button>\n        <div id=\"auth-error\" class=\"auth-error\">Đang kiểm tra dữ liệu...</div>\n    </div>\n</div>\n<button id=\"logout-btn\" onclick=\"window.doLogout()\">Đăng xuất</button>\n\n<script src=\"https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js\"></script>\n<script src=\"https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js\"></script>\n\n<script>\n    (function() {\n    // 1. Cấu hình Firebase (HÃY ĐIỀN API KEY CỦA BẠN VÀO ĐÂY)\n    const firebaseConfig = {\n        apiKey: \"AIzaSyDyxtHSD3lD-PlmrixZZ7BVz8-ibm9yPmQ\", \n        authDomain: \"iot-tracking-c20aa.firebaseapp.com\",\n        projectId: \"iot-tracking-c20aa\"\n    };\n\n    if (!firebase.apps.length) {\n        firebase.initializeApp(firebaseConfig);\n    }\n    const auth = firebase.auth();\n\n    // 2. Đưa form lên lớp trên cùng\n    setTimeout(() => {\n        const overlay = document.getElementById('auth-overlay');\n        const logoutBtn = document.getElementById('logout-btn');\n        if(overlay && logoutBtn) {\n            document.body.appendChild(overlay);\n            document.body.appendChild(logoutBtn);\n        }\n    }, 100);\n\n    // 3. Hàm xử lý đăng nhập (Được gọi trực tiếp từ HTML để chống lỗi bóng ma)\n    window.doLogin = function() {\n        const email = document.getElementById('email').value;\n        const pass = document.getElementById('password').value;\n        const btn = document.getElementById('login-btn');\n        const err = document.getElementById('auth-error');\n\n        if(!email || !pass) {\n            err.style.display = 'block';\n            err.innerText = \"Vui lòng nhập đủ thông tin!\";\n            return;\n        }\n\n        btn.innerText = \"Đang xác thực...\";\n        err.style.display = 'none';\n\n        auth.signInWithEmailAndPassword(email, pass)\n            .then(() => {\n                btn.innerText = \"Thành công!\";\n            })\n            .catch((error) => {\n                err.style.display = 'block';\n                err.innerText = \"Lỗi: \" + error.message; // Sẽ hiện mã lỗi chi tiết nếu sai\n                btn.innerText = \"Xác thực Token\";\n            });\n    };\n\n    // 4. Hàm xử lý đăng xuất\n    window.doLogout = function() {\n        auth.signOut();\n    };\n\n    // 5. Quản lý trạng thái đóng/mở màn hình\n    auth.onAuthStateChanged((user) => {\n        const overlay = document.getElementById('auth-overlay');\n        const logoutBtn = document.getElementById('logout-btn');\n        if(overlay && logoutBtn) {\n            if (user) {\n                overlay.style.display = 'none';\n                logoutBtn.style.display = 'block';\n            } else {\n                overlay.style.display = 'flex';\n                logoutBtn.style.display = 'none';\n            }\n        }\n    });\n})();\n</script>",
+        "storeOutMessages": true,
+        "passthru": true,
+        "resendOnRefresh": true,
+        "templateScope": "widget:ui",
+        "className": "",
+        "x": 160,
+        "y": 1300,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "db7da5224b65fc32",
+        "type": "firebase-in",
+        "z": "dc67bc384f2f408d",
+        "name": "devices active",
+        "constraints": {},
+        "database": "4d86e51837b4a911",
+        "inputs": 0,
+        "listenerType": "value",
+        "outputType": "auto",
+        "passThrough": false,
+        "path": "devices/info",
+        "pathType": "str",
+        "useConstraints": false,
+        "x": 250,
+        "y": 380,
+        "wires": [
+            [
+                "de5fbdf6cbf55a4b",
+                "cb4d8712814d9f82"
+            ]
+        ]
+    },
+    {
+        "id": "cd2f9adb8fc24a45",
+        "type": "firebase-in",
+        "z": "dc67bc384f2f408d",
+        "name": "liive_data",
+        "constraints": {},
+        "database": "4d86e51837b4a911",
+        "inputs": 0,
+        "listenerType": "value",
+        "outputType": "json",
+        "passThrough": false,
+        "path": "readings/latest",
+        "pathType": "str",
+        "useConstraints": false,
+        "x": 220,
+        "y": 560,
+        "wires": [
+            [
+                "90be0cfe934f1b2c",
+                "40fc9b958b6acf95",
+                "d6d6b81745669e0e"
+            ]
+        ]
+    },
+    {
+        "id": "b64120edcb527474",
+        "type": "firebase-in",
+        "z": "dc67bc384f2f408d",
+        "name": "",
+        "constraints": {},
+        "database": "4d86e51837b4a911",
+        "inputs": 0,
+        "listenerType": "value",
+        "outputType": "auto",
+        "passThrough": false,
+        "path": "sensors/live_data",
+        "pathType": "str",
+        "useConstraints": false,
+        "x": 280,
+        "y": 940,
+        "wires": [
+            [
+                "6b162d75d18ff5d2"
+            ]
+        ]
+    },
+    {
+        "id": "2b1e76347060e29b",
+        "type": "firebase-get",
+        "z": "dc67bc384f2f408d",
+        "name": "get req",
+        "constraints": {},
+        "database": "4d86e51837b4a911",
+        "outputType": "auto",
+        "passThrough": false,
+        "path": "readings/latest/wake",
+        "pathType": "str",
+        "useConstraints": false,
+        "x": 400,
+        "y": 240,
+        "wires": [
+            [
+                "de5fbdf6cbf55a4b",
+                "86939379e652d3f5"
+            ]
+        ]
+    },
+    {
+        "id": "1354bc062530ac21",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 4",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 640,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "cb4d8712814d9f82",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 5",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 380,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "86939379e652d3f5",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 6",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "aa03860dbe2cf20d",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 7",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 580,
+        "y": 820,
+        "wires": []
+    },
+    {
+        "id": "0f8f30358ada6bf7",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 2",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 940,
+        "y": 580,
+        "wires": []
+    },
+    {
+        "id": "90be0cfe934f1b2c",
+        "type": "change",
+        "z": "dc67bc384f2f408d",
+        "name": "light",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.light",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 470,
+        "y": 540,
+        "wires": [
+            [
+                "32583b81c0cb2cf5",
+                "bcd6e1d11bdcdb58",
+                "0f8f30358ada6bf7"
+            ]
+        ]
+    },
+    {
+        "id": "40fc9b958b6acf95",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 8",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 360,
+        "y": 660,
+        "wires": []
+    },
+    {
+        "id": "d6d6b81745669e0e",
+        "type": "change",
+        "z": "dc67bc384f2f408d",
+        "name": "distance",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.distance_mm",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 480,
+        "y": 600,
+        "wires": [
+            [
+                "421b65864921484b",
+                "54eb01e58a09f3ed"
+            ]
+        ]
+    },
+    {
+        "id": "54eb01e58a09f3ed",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 9",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 660,
+        "y": 680,
+        "wires": []
+    },
+    {
+        "id": "60a982046890cc8b",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 10",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 340,
+        "y": 1180,
+        "wires": []
+    },
+    {
+        "id": "d4f9faeeae53db21",
+        "type": "debug",
+        "z": "dc67bc384f2f408d",
+        "name": "debug 11",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 560,
+        "y": 1040,
+        "wires": []
+    },
+    {
+        "id": "659cdfece579033f",
+        "type": "ui-group",
+        "name": "discover",
+        "page": "5f73a5f89947c7eb",
+        "width": 6,
+        "height": 1,
+        "order": 1,
+        "showTitle": true,
+        "className": "",
+        "visible": true,
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "8d93d2da5b7b38e6",
+        "type": "ui-group",
+        "name": "livedata",
+        "page": "5f73a5f89947c7eb",
+        "width": 6,
+        "height": 1,
+        "order": 2,
+        "showTitle": true,
+        "className": "",
+        "visible": true,
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "4d86e51837b4a911",
+        "type": "firebase-config",
+        "name": "My Database",
+        "authType": "privateKey",
+        "claims": {},
+        "createUser": false,
+        "status": {
+            "firestore": false,
+            "storage": false
+        },
+        "useClaims": false
+    },
+    {
+        "id": "896274f034967315",
+        "type": "ui-group",
+        "name": "devices",
+        "page": "5f73a5f89947c7eb",
+        "width": 6,
+        "height": 1,
+        "order": 3,
+        "showTitle": true,
+        "className": "",
+        "visible": true,
+        "disabled": "false",
+        "groupType": "default"
+    },
+    {
+        "id": "f7e8e1d52d7c7ca1",
+        "type": "ui-base",
+        "name": "My Dashboard",
+        "path": "/dashboard",
+        "appIcon": "",
+        "includeClientData": true,
+        "acceptsClientConfig": [
+            "ui-notification",
+            "ui-control"
+        ],
+        "showPathInSidebar": false,
+        "headerContent": "page",
+        "navigationStyle": "default",
+        "titleBarStyle": "default",
+        "showReconnectNotification": true,
+        "notificationDisplayTime": 1,
+        "showDisconnectNotification": true,
+        "allowInstall": false
+    },
+    {
+        "id": "5f73a5f89947c7eb",
+        "type": "ui-page",
+        "name": "status",
+        "ui": "f7e8e1d52d7c7ca1",
+        "path": "/status",
+        "icon": "devices",
+        "layout": "grid",
+        "theme": "18cf9683c459c9cb",
+        "breakpoints": [
+            {
+                "name": "Default",
+                "px": "0",
+                "cols": "3"
+            },
+            {
+                "name": "Tablet",
+                "px": "576",
+                "cols": "6"
+            },
+            {
+                "name": "Small Desktop",
+                "px": "768",
+                "cols": "9"
+            },
+            {
+                "name": "Desktop",
+                "px": "1024",
+                "cols": "12"
+            }
+        ],
+        "order": 1,
+        "className": "",
+        "visible": true,
+        "disabled": false
+    },
+    {
+        "id": "18cf9683c459c9cb",
+        "type": "ui-theme",
+        "name": "ESP32 Light Theme",
+        "colors": {
+            "surface": "#f7f7f4",
+            "primary": "#171717",
+            "bgPage": "#f7f7f4",
+            "groupBg": "#f7f7f4",
+            "groupOutline": "#f7f7f4"
+        },
+        "sizes": {
+            "density": "default",
+            "pagePadding": "0px",
+            "groupGap": "0px",
+            "groupBorderRadius": "0px",
+            "widgetGap": "0px"
+        }
+    },
+    {
+        "id": "0c0bdca90608cc14",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "@flowfuse/node-red-dashboard": "1.30.2",
+            "@gogovega/node-red-contrib-firebase-realtime-database": "0.8.2",
+            "@gogovega/firebase-config-node": "0.3.5"
+        }
+    }
+]
