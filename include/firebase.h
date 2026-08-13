@@ -3,7 +3,9 @@
 
 #include <Arduino.h>
 
-// Writes the given reading and switch state to Firebase Realtime Database.
-void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange, bool switchOn);
+// Appends a timestamped device-status record to Firebase Realtime Database.
+bool postFirebaseStatus(const char *state, bool switchOn, const char *sensorStatus,
+                        bool mqttConnected, const char *discordStatus,
+                        int maxAttempts = 1);
 
 #endif // FIREBASE_H

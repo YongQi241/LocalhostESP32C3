@@ -5,20 +5,19 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
-void sendDiscordAlert(uint16_t distanceMM, int zoneIndex, int lightRaw, int lightDelta) {
+bool sendDiscordAlert(uint16_t distanceMM, int distanceDelta, int zoneIndex, int lightRaw, int lightDelta){
   WiFiClientSecure client;
-  client.setInsecure(); // pin Discord's root CA for production use
+  client.setInsecure(); // TLS certificate is not verified
 
   HTTPClient http;
-  if (!http.begin(client, DISCORD_WEBHOOK_URL)) {
+  if (!http.begin(client, DISCORD_WEBHOOK_URL))
+  {
     Serial.println("Discord: begin() failed.");
-    return;
+    return false;
   }
 
   http.addHeader("Content-Type", "application/json");
-
-  const String message = String(zoneLabel[zoneIndex]) + " (" + distanceMM
-      + " mm) | Light: " + lightRaw + " (change " + lightDelta + ")";
+  const String message = String(zoneLabel[zoneIndex]) + " (" + distanceMM + " mm, change " + distanceDelta + ") | Light: " + lightRaw + " (change " + lightDelta + ")";
 
   JsonDocument doc;
   doc["content"] = message;
@@ -27,11 +26,10 @@ void sendDiscordAlert(uint16_t distanceMM, int zoneIndex, int lightRaw, int ligh
   serializeJson(doc, content);
 
   const int status = http.POST(content);
-  if (status > 0) {
-    Serial.printf("Discord webhook status: %d\n", status);
-  } else {
-    Serial.printf("Discord webhook failed: %s\n", http.errorToString(status).c_str());
-  }
+  const bool ok = status >= 200 && status < 300;
+  if (ok) Serial.printf("Discord status: %d\n", status);
+  else Serial.printf("Discord failed (%d): %s\n", status, http.errorToString(status).c_str());
 
   http.end();
+  return ok;
 }

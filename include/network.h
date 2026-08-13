@@ -18,21 +18,10 @@ extern PubSubClient mqttClient;
 // Your purpose is to blink LED
 extern bool settingsChanged;
 
-// ---------------- MQTT access control ----------------
-// Ensure correct user - device communication:
-//   a) Topic scoping - topics are derived from MQTT_DEVICE_ID as
-//        xiao/esp32c3/sensors/<MQTT_DEVICE_ID>/*
-//      Only someone who knows your MQTT_DEVICE_ID knows which topic to
-//      subscribe to.
-//   b) Shared key - every outgoing data message carries your device ID
-//      and MQTT_ACCESS_KEY, so a receiver can verify the message really
-//      came from the device. Every incoming threshold/settings command
-//      MUST include a matching "key" field else silently ignored.
-//
-// Live threshold/awake/zones updates are published (retained) to
-// MQTT_TOPIC_THRESHOLD as JSON, any subset of fields is fine, e.g.:
-//   {"key":"YOUR_MQTT_ACCESS_KEY","distance_mm":50,"light":100,"awake_ms":5000}
-// The LED blinks 3 times to confirm the device picked up the change.
+/*  Topics are derived from MQTT_DEVICE_ID as xiao/esp32c3/sensors/<MQTT_DEVICE_ID> 
+    Incoming mqtt must have a MQTT_ACCESS_KEY, else silently ignored. 
+    Live threshold/awake/zones updates are published (retained) to MQTT_TOPIC_THRESHOLD as JSON, e.g.: {"key":"MQTT_ACCESS_KEY","distance_mm":50,"light":100,"awake_ms":5000}
+*/
 
 bool connectWiFi();
 bool connectMQTT();

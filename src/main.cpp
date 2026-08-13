@@ -13,8 +13,7 @@
  *   discord.h/.cpp   - Discord webhook push.
  *   power.h/.cpp     - deep sleep entry and the LED blink helper.
  *
- * Things you MUST fill in before this is useful: edit the configuration
- * constants in env_config.cpp, then build and flash the firmware.
+ * TODO: edit the configuration constants in env_config.cpp.
  */
 
 #include <Wire.h>
@@ -31,12 +30,17 @@
 
 VL53L1X distanceSensor;
 
-void publishAndMaybeAlert(uint16_t distanceMM, int lightRaw, int distanceDelta, int lightDelta, bool suddenChange);
+void publishSensor(uint16_t distanceMM, int lightRaw);
 void reportSwitchOff();
 void tryReportSwitchOff();
 void runActiveWindow();
 
-void setup() {
+const char *distanceSensorStatus = "not_checked";
+const char *discordStatus = "not_sent";
+bool distanceSensorAvailable = false;
+
+void setup()
+{
   Serial.begin(115200);
   delay(100); // let USB-serial settle right after a deep-sleep reset
 
@@ -48,9 +52,11 @@ void setup() {
   const bool switchOn = digitalRead(SWITCH_PIN);
 
   // Send one final OFF report, then stop all activity while the switch is off.
-  if (!switchOn) {
+  if (!switchOn)
+  {
     digitalWrite(LED_PIN, LOW);
-    if (!switchOffReported) {
+    if (!switchOffReported)
+    {
       tryReportSwitchOff();
     }
     Serial.println("Switch OFF - sleeping.");
@@ -62,21 +68,29 @@ void setup() {
   switchOffReported = false;
   digitalWrite(LED_PIN, HIGH);
 
-  //Sensors
+  // Sensors
   Wire.begin(D4, D5); // VL53L1X: SDA=D4, SCL=D5
   distanceSensor.setTimeout(500);
 
   uint16_t distanceMM = lastDistanceMM;
-  if (distanceSensor.init()) {
-    distanceSensor.setDistanceMode(VL53L1X::Long);
+  if (distanceSensor.init())
+  {
+    distanceSensorAvailable = true;
+    distanceSensorStatus = "ok";
+    distanceSensor.setDistanceMode(VL53L1X::Short);
     distanceSensor.setMeasurementTimingBudget(50000);
     distanceSensor.startContinuous(50);
     distanceMM = distanceSensor.read(); // blocks briefly for the first sample
-    if (distanceSensor.timeoutOccurred()) {
+    if (distanceSensor.timeoutOccurred())
+    {
+      distanceSensorStatus = "timeout";
       Serial.println("VL53L1X timeout - reusing last distance.");
       distanceMM = lastDistanceMM;
     }
-  } else {
+  }
+  else
+  {
+    distanceSensorStatus = "not_detected";
     Serial.println("VL53L1X not detected this cycle - reusing last distance.");
   }
 
@@ -84,18 +98,18 @@ void setup() {
 
   // Decide if this is a "sudden change", and which reading caused it
   const int distanceDelta = hasBaseline ? abs((int)distanceMM - (int)lastDistanceMM) : 0;
-  const int lightDelta    = hasBaseline ? abs(lightRaw - lastLightRaw) : 0;
+  const int lightDelta = hasBaseline ? abs(lightRaw - lastLightRaw) : 0;
 
   const bool distanceSuddenChange = hasBaseline && (distanceDelta > distanceThresholdMM);
-  const bool lightSuddenChange    = hasBaseline && (lightDelta > lightThreshold);
-  const bool suddenChange         = distanceSuddenChange || lightSuddenChange;
-  const bool heartbeatDue         = (wakeCount % HEARTBEAT_EVERY_N_WAKES) == 0; //for check alive
-  const bool firstBoot            = !hasBaseline;
+  const bool lightSuddenChange = hasBaseline && (lightDelta > lightThreshold);
+  const bool suddenChange = distanceSuddenChange || lightSuddenChange;
+  const bool heartbeatDue = (wakeCount % HEARTBEAT_EVERY_N_WAKES) == 0; // for check alive
+  const bool firstBoot = !hasBaseline;
 
   const int zoneIdx = zoneForDistance(distanceMM);
-  const bool   zoneChanged  = (zoneIdx != lastZoneIndex);
-  const bool   shouldNotify = suddenChange || zoneChanged; // distance jump, zone crossing, or a light jump = report 
-  //bug
+  const bool zoneChanged = (zoneIdx != lastZoneIndex);
+  const bool shouldNotify = suddenChange || zoneChanged; // distance jump, zone crossing, or a light jump = report
+  
   Serial.printf(
       "Distance: %u mm (d=%d) | Light: %d (d=%d) | distSudden=%s lightSudden=%s heartbeat=%s zone=%s\n",
       distanceMM, distanceDelta, lightRaw, lightDelta,
@@ -103,83 +117,108 @@ void setup() {
       heartbeatDue ? "yes" : "no",
       zoneIdx >= 0 ? zoneLabel[zoneIdx] : "n/a");
 
-  if (suddenChange || heartbeatDue || firstBoot || zoneChanged) {
-    if (connectWiFi() && connectMQTT()) {
+  if (suddenChange || heartbeatDue || firstBoot || zoneChanged)
+  {
+    if (connectWiFi() && connectMQTT())
+    {
       mqttClient.subscribe(MQTT_TOPIC_THRESHOLD.c_str());
 
       // Push notification first
-      if (shouldNotify && zoneIdx >= 0) {
-        sendDiscordAlert(distanceMM, zoneIdx, lightRaw, lightDelta);
-        lastZoneIndex = zoneIdx;
+      if (shouldNotify && zoneIdx >= 0)
+      {
+        const bool discordSent = sendDiscordAlert(distanceMM, distanceDelta, zoneIdx, lightRaw, lightDelta);
+        discordStatus = discordSent ? "sent" : "failed";
+        if (discordSent)
+        {
+          lastZoneIndex = zoneIdx;
+        }
       }
 
       // Updates lastDistanceMM/lastLightRaw, the baseline the active window compares against.
-      publishAndMaybeAlert(distanceMM, lightRaw, distanceDelta, lightDelta, suddenChange);
+      publishSensor(distanceMM, lightRaw);
 
       // Loop replacement for control after deep sleep
       runActiveWindow();
-
-    } else {
+    }
+    else
+    {
       Serial.println("Network unavailable this cycle - will retry next wake.");
       lastDistanceMM = distanceMM;
-      lastLightRaw   = lightRaw;
-      hasBaseline    = true;
+      lastLightRaw = lightRaw;
+      hasBaseline = true;
       // The notification never went out, retry next wake.
     }
-  } else {
+  }
+  else
+  {
     lastDistanceMM = distanceMM;
-    lastLightRaw   = lightRaw;
-    hasBaseline    = true;
+    lastLightRaw = lightRaw;
+    hasBaseline = true;
   }
 
   // The switch or the settings may have changed during the active window so re-check before deciding sleep time.
   const bool switchStillOn = digitalRead(SWITCH_PIN);
-  if (!switchStillOn && !switchOffReported) {
+  if (!switchStillOn && !switchOffReported)
+  {
     tryReportSwitchOff();
   }
   goToSleep(switchStillOn ? CHECK_INTERVAL_US : SWITCH_OFF_INTERVAL_US);
 }
 
-void loop() {
+void loop()
+{
   // Chip back into deep sleep at the end, so loop() never gets reached, use setup() only.
 }
 
-// Publishes the given reading to MQTT + Firebase, and updates the baseline used for future delta comparisons.
-void publishAndMaybeAlert(uint16_t distanceMM, int lightRaw, int distanceDelta, int lightDelta, bool suddenChange) {
+// Publishes live sensor readings to MQTT.
+void publishSensor(uint16_t distanceMM, int lightRaw)
+{
   publishReadingsMQTT(distanceMM, lightRaw, true);
-  sendToFirebase(distanceMM, lightRaw, suddenChange, true);
 
   lastDistanceMM = distanceMM;
-  lastLightRaw   = lightRaw;
-  hasBaseline    = true;
+  lastLightRaw = lightRaw;
+  hasBaseline = true;
 }
 
 // Sends the final retained state while the network is still available.
 // The RTC flag ensures an unchanged OFF switch does not report every timer wake.
-void reportSwitchOff() {
+void reportSwitchOff()
+{
   publishReadingsMQTT(lastDistanceMM, lastLightRaw, false);
-  sendToFirebase(lastDistanceMM, lastLightRaw, false, false);
-  switchOffReported = true;
-  Serial.println("Final switch OFF state reported.");
+  switchOffReported = postFirebaseStatus(
+      "switch_off", false, distanceSensorStatus,
+      mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT);
+  if (switchOffReported) Serial.println("Final switch OFF state reported.");
+  else Serial.println("Due to Firebase: Could not report switch OFF state - will retry next wake.");
 }
 
-void tryReportSwitchOff() {
-  if (mqttClient.connected() || (connectWiFi() && connectMQTT())) {
+void tryReportSwitchOff()
+{
+  if (mqttClient.connected() || (connectWiFi() && connectMQTT()))
+  {
     reportSwitchOff();
-  } else {
+  }
+  else
+  {
     Serial.println("Could not report switch OFF state - will retry next wake.");
   }
 }
 
 // Loop design to handle đeepsleep to conserve battery as much as possible.
-void runActiveWindow() {
+void runActiveWindow()
+{
+  uint32_t lastFirebasePost = millis();
   uint32_t lastActivity = millis(); // reset on every sudden change; window ends when this goes stale
+  int observedZoneIndex = lastZoneIndex;
 
-  while (millis() - lastActivity < awakeDurationMs) {
-    if (digitalRead(SWITCH_PIN) == LOW) {
+  while (millis() - lastActivity < awakeDurationMs)
+  {
+    if (digitalRead(SWITCH_PIN) == LOW)
+    {
       Serial.println("Switch turned OFF mid-window - stopping early.");
       digitalWrite(LED_PIN, LOW);
-      if (!switchOffReported) {
+      if (!switchOffReported)
+      {
         reportSwitchOff();
       }
       return;
@@ -187,43 +226,79 @@ void runActiveWindow() {
 
     mqttClient.loop(); // process any incoming threshold/awake-duration updates
 
-    if (settingsChanged) {
+    if (settingsChanged)
+    {
       Serial.println("Settings changed - blinking LED.");
       blinkLED(SETTINGS_BLINK_COUNT, SETTINGS_BLINK_MS);
       settingsChanged = false;
     }
 
-    const uint16_t distanceMM = distanceSensor.read();
+    uint16_t distanceMM = lastDistanceMM;
+    bool sensorOk = false;
+    if (distanceSensorAvailable)
+    {
+      distanceMM = distanceSensor.read();
+      sensorOk = !distanceSensor.timeoutOccurred();
+      distanceSensorStatus = sensorOk ? "ok" : "timeout";
+    }
+
     const int lightRaw = analogRead(LIGHT_PIN);
+    const int distanceDelta = sensorOk ? abs((int)distanceMM - (int)lastDistanceMM) : 0;
+    const int lightDelta = abs(lightRaw - lastLightRaw);
+    const bool distanceSuddenChange = sensorOk && (distanceDelta > distanceThresholdMM);
+    const bool lightSuddenChange = (lightDelta > lightThreshold);
+    const bool suddenChange = distanceSuddenChange || lightSuddenChange;
+    const int zoneIdx = sensorOk ? zoneForDistance(distanceMM) : -1;
+    const bool zoneChanged = sensorOk && (zoneIdx != lastZoneIndex);
+    const bool observedZoneChanged = sensorOk && (zoneIdx != observedZoneIndex);
+    const bool shouldNotify = suddenChange || zoneChanged;
 
-    if (!distanceSensor.timeoutOccurred()) {
-      const int distanceDelta = abs((int)distanceMM - (int)lastDistanceMM);
-      const int lightDelta    = abs(lightRaw - lastLightRaw);
-
-      const bool distanceSuddenChange = (distanceDelta > distanceThresholdMM);
-      const bool lightSuddenChange    = (lightDelta > lightThreshold);
-      const bool suddenChange         = distanceSuddenChange || lightSuddenChange;
-
-      const int zoneIdx = zoneForDistance(distanceMM);
-      const bool   zoneChanged  = (zoneIdx != lastZoneIndex);
-      const bool   shouldNotify = suddenChange || zoneChanged;
-
-      // Push notification first
-      if (shouldNotify && zoneIdx >= 0) {
-        Serial.printf("Zone notification during active window -> %s\n", zoneLabel[zoneIdx]);
-        sendDiscordAlert(distanceMM, zoneIdx, lightRaw, lightDelta);
+    // Preserve the previous zone after a failed Discord request so it can retry.
+    if (shouldNotify && zoneIdx >= 0)
+    {
+      Serial.printf("Zone notification during active window -> %s\n", zoneLabel[zoneIdx]);
+      const bool discordSent = sendDiscordAlert(distanceMM, distanceDelta, zoneIdx, lightRaw, lightDelta);
+      discordStatus = discordSent ? "sent" : "failed";
+      if (discordSent)
+      {
         lastZoneIndex = zoneIdx;
-        lastActivity = millis(); // Activity: Zone (Distance) and Light
-      }
-
-      // still changing, reset timer.
-      if (suddenChange) {
-        Serial.println("Additional sudden change during active window - resetting idle timer.");
-        publishAndMaybeAlert(distanceMM, lightRaw, distanceDelta, lightDelta, true);
-        lastActivity = millis();
       }
     }
 
+    if (observedZoneChanged)
+    {
+      observedZoneIndex = zoneIdx;
+      lastActivity = millis();
+    }
+
+    if (suddenChange)
+    {
+      Serial.println("Additional sudden change during active window - resetting idle timer.");
+      lastActivity = millis();
+    }
+
+    if (sensorOk)
+    {
+      publishSensor(distanceMM, lightRaw);
+    }
+    else
+    {
+      // Distance is unavailable, but light monitoring can continue.
+      lastLightRaw = lightRaw;
+      hasBaseline = true;
+    }
+
+    if (millis() - lastFirebasePost >= FIREBASE_STATUS_INTERVAL_MS)
+    {
+      lastFirebasePost = millis();
+      postFirebaseStatus("active", true, distanceSensorStatus, mqttClient.connected(), discordStatus);
+    }
+
     delay(ACTIVE_LOOP_DELAY_MS);
+  }
+
+  if (!postFirebaseStatus("idle", true, distanceSensorStatus, mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT))
+  {
+    Serial.println("Firebase: final idle status was not reported.");
   }
 }

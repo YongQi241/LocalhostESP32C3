@@ -5,37 +5,49 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
-void sendToFirebase(uint16_t distanceMM, int lightRaw, bool suddenChange, bool switchOn) {
-  WiFiClientSecure client;
-  client.setInsecure(); // pin Firebase's root CA for production use
-
-  HTTPClient http;
-  const String url = String("https://") + FIREBASE_HOST
-      + "/readings/latest.json?auth=" + FIREBASE_AUTH;
-
-  if (!http.begin(client, url)) {
-    Serial.println("Firebase: begin() failed.");
-    return;
-  }
-
-  http.addHeader("Content-Type", "application/json");
-
+bool postFirebaseStatus(const char *state, bool switchOn, const char *sensorStatus,
+                        bool mqttConnected, const char *discordStatus,
+                        int maxAttempts) {
   JsonDocument doc;
-  doc["distance_mm"] = distanceMM;
-  doc["light"] = lightRaw;
-  doc["sudden_change"] = suddenChange;
+  doc["device_id"] = MQTT_DEVICE_ID;
+  doc["state"] = state;
   doc["switch_on"] = switchOn;
+  doc["sensor_status"] = sensorStatus;
+  doc["mqtt_connected"] = mqttConnected;
+  doc["discord_status"] = discordStatus;
   doc["wake"] = wakeCount;
+  doc["timestamp"][".sv"] = "timestamp"; // Firebase server time in milliseconds
 
   String body;
   serializeJson(doc, body);
 
-  const int status = http.PUT(body);
-  if (status > 0) {
-    Serial.printf("Firebase PUT status: %d\n", status);
-  } else {
-    Serial.printf("Firebase PUT failed: %s\n", http.errorToString(status).c_str());
-  }
+  for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+    WiFiClientSecure client;
+    client.setInsecure(); // TLS certificate is not verified
 
-  http.end();
+    HTTPClient http;
+    const String url = String("https://") + FIREBASE_HOST + "/devices/" +
+                       MQTT_DEVICE_ID + "/status.json?auth=" + FIREBASE_AUTH;
+
+    int status = -1;
+    if (http.begin(client, url)) {
+      http.addHeader("Content-Type", "application/json");
+      status = http.POST(body);
+      http.end();
+    } else {
+      Serial.println("Firebase: begin() failed.");
+    }
+
+    if (status >= 200 && status < 300) {
+      Serial.printf("Firebase POST status: %d\n", status);
+      return true;
+    }
+
+    Serial.printf("Firebase POST attempt %d/%d failed (status %d).\n",
+                  attempt, maxAttempts, status);
+    if (attempt < maxAttempts) {
+      delay(250);
+    }
+  }
+  return false;
 }

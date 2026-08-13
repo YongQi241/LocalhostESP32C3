@@ -73,13 +73,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
     return;
   }
 
-  /* 
-  Access control: only accept this command if it carries the correct 
-  shared key. Anyone can technically subscribe/publish to a topic on a
-  public broker, but without this key they cannot make the device act
-  on what they send. If MQTT_ACCESS_KEY is blank, the check is skipped.
-  */
-
+  // Only accept command if it carries the correct key else nothing shall change.
+  // If MQTT_ACCESS_KEY is blank, skip.
   if (MQTT_ACCESS_KEY[0] != '\0')
   {
     const char *providedKey = doc["key"] | "";
@@ -153,17 +148,14 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
   if (changed)
   {
     settingsChanged = true; // consumed by runActiveWindow() to trigger the confirmation blink
-    Serial.printf("Settings updated -> distance: %u mm, light: %d, awake: %lu ms\n",
-                  distanceThresholdMM, lightThreshold, (unsigned long)awakeDurationMs);
+    Serial.printf("Settings updated -> distance: %u mm, light: %d, awake: %lu ms\n", distanceThresholdMM, lightThreshold, (unsigned long)awakeDurationMs);
   }
 }
 
 void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn)
 {
-  // "id" and "key" for receiver confirmation of exact device.
   JsonDocument doc;
   doc["id"] = MQTT_DEVICE_ID;
-  doc["key"] = MQTT_ACCESS_KEY;
   doc["distance_mm"] = distanceMM;
   doc["light"] = lightRaw;
   doc["switch_on"] = switchOn;
@@ -175,7 +167,7 @@ void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn)
   // the broker holds the message and hands it to the next subscriber, even long afterpublish --> a late connection can sees the recent reading instead of nothing
   if (mqttClient.publish(MQTT_TOPIC_DATA.c_str(), payload.c_str(), true))
   {
-    Serial.print("MQTT published (retained): ");
+    Serial.print("MQTT published: ");
     Serial.println(payload);
   }
   else

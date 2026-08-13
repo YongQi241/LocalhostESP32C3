@@ -1,185 +1,210 @@
-# Build the Project
+# ESP32-C3 Distance and Light Monitor
 
-Set the WiFi, MQTT, Firebase, and Discord values in
-`src/env_config.cpp` before building. These settings are compiled into
-the firmware.
+This project uses a Seeed Studio XIAO ESP32-C3, a VL53L1X distance sensor,
+a TEMT6000 light sensor, MQTT, Firebase Realtime Database, and Discord.
+The device normally uses deep sleep to reduce power consumption. A sudden
+sensor change or a distance-zone transition starts an active monitoring window.
 
-Using the PlatformIO toolbar in VS Code, select Build.
+## Configuration
 
-Alternatively, run:
+Edit `src/env_config.cpp` before building:
 
+- `WIFI_SSID` and `WIFI_PASSWORD`
+- `MQTT_BROKER`, `MQTT_PORT`, and `MQTT_DEVICE_ID`
+- `MQTT_ACCESS_KEY` (optional for the demo)
+- `FIREBASE_HOST` and `FIREBASE_AUTH`
+- `DISCORD_WEBHOOK_URL`
+
+`MQTT_ACCESS_KEY` is used only to validate incoming settings. If it is an
+empty string, access-key validation is disabled.
+
+Timing, thresholds, pin assignments, zone limits, and retry counts are in
+`include/config.h` and `src/state.cpp`.
+
+## Build
+
+Use the PlatformIO Build command in VS Code, or run:
+
+```sh
 pio run
+```
 
-After a successful build, PlatformIO generates files similar to:
+The board environment is `seeed_xiao_esp32c3`. Build output is written under:
 
-.pio/build/esp32dev/firmware.bin
-.pio/build/esp32dev/firmware.elf
+```text
+.pio/build/seeed_xiao_esp32c3/
+```
 
-# Run the Wokwi Simulation
+## Wokwi simulation
 
-Build the project before starting Wokwi.
+Build the project, open the VS Code Command Palette, and run:
 
-Then:
-
-Open the VS Code Command Palette:
-Linux/Windows: Ctrl+Shift+P
-macOS: Cmd+Shift+P
-Run:
+```text
 Wokwi: Start Simulator
-
-
-# Live MQTT Settings
-
-The device listens for one retained MQTT message that can change its
-behavior on the fly, no reflashing needed. This document explains how that
-works.
-
-## Topic
-
-```
-xiao/esp32c3/sensors/threshold
 ```
 
-This is the same topic name as the constant `MQTT_TOPIC_THRESHOLD` in
-`main.cpp`. The device subscribes to it every time it wakes up and connects
-to the broker.
+The included simulation uses `Wokwi-GUEST` with no Wi-Fi password.
 
-## How to send a setting
+## Device behavior
 
-Publish a JSON object to the topic above. Use the retain flag so the
-setting survives broker restarts and gets picked up again if the device
-reboots.
+While the switch is ON, the device wakes approximately every 2 seconds and
+checks the sensors. It connects to the network when one of these conditions is
+true:
 
-```
-mosquitto_pub -h broker.hivemq.com -r -t xiao/esp32c3/sensors/threshold \
-    -m '{"distance_mm":50,"light":100,"awake_ms":5000}'
-```
+- First reading after boot
+- Sudden distance or light change
+- Distance-zone change
+- Heartbeat due (every 30 wakes, approximately 60 seconds)
 
-You do not need to send every field at once. Any subset is fine, only the
-fields you include get changed, everything else keeps its current value.
+After connecting, the device enters an active window. Sensors are checked every
+250 ms. Sudden changes and observed zone changes reset the idle timer. When no
+further activity occurs for `awakeDurationMs` (default 3000 ms), the device posts
+an `idle` status and returns to deep sleep.
 
-## Fields
+While the switch is OFF, the device sends one final `switch_off` status and then
+wakes approximately every 5 seconds to check the switch. GPIO wakeup can also
+wake it when the switch is turned ON.
 
-### distance_mm
+## MQTT live readings
 
-Distance delta, in millimeters, that counts as a "sudden change" for the
-distance sensor. If the reading jumps by more than this amount between
-wakes, the device treats it as sudden.
+Topics include `MQTT_DEVICE_ID`. With the default ID `xiao01`, they are:
 
-Default: 100
-
-### light
-
-Light reading delta, in raw ADC counts, that counts as a "sudden change"
-for the light sensor. Same idea as distance_mm, just for light.
-
-Default: 200
-
-### awake_ms
-
-How long, in milliseconds, the device stays awake and watching after the
-last sudden change before it goes back to deep sleep. This is an idle
-timeout, not a fixed window, so every additional sudden change resets the
-clock.
-
-Default: 3000
-
-### zones
-
-An array of distance zones, each one a label plus a cutoff. This is what
-turns a raw distance reading into a message like "Close!" or "Far..".
-
-```
-{"zones":[{"max_mm":300,"label":"Close!"},
-          {"max_mm":600,"label":"Medium"},
-          {"max_mm":65535,"label":"Far.."}]}
+```text
+xiao/esp32c3/sensors/xiao01/data
+xiao/esp32c3/sensors/xiao01/threshold
 ```
 
-Rules for this field:
+The data topic carries live sensor readings:
 
-- List zones in ascending order by `max_mm`.
-- The last zone in the list always acts as the catch all for anything
-  beyond it, so its own `max_mm` value barely matters as long as it is the
-  largest one, a value like 65535 is a safe choice.
-- Sending a `zones` array replaces the whole table, not just the entries
-  you list. If you send 2 zones, the device now has 2 zones, the previous
-  ones are gone.
-- Up to 5 zones are kept (`MAX_ZONES` in main.cpp). Extra entries beyond
-  that are ignored, with a note in the serial log.
-- Each label can be up to 23 characters (`ZONE_LABEL_LEN - 1` in
-  main.cpp), longer labels get cut off.
-- Entries missing `max_mm` or `label` are skipped rather than rejecting
-  the whole message.
+```json
+{
+  "id": "xiao01",
+  "distance_mm": 280,
+  "light": 512,
+  "switch_on": true,
+  "wake": 42
+}
+```
 
-Default zones: under 300mm is "Close!", anything past that is "Far..".
+Data messages are retained, so a new subscriber receives the latest state.
+The device publishes once when the active session begins and then after each
+valid distance sample during the active window (nominally every 250 ms, plus
+network-processing time). A final retained message sets `switch_on` to `false`.
 
-## What happens when a setting changes
+Subscribe with:
 
-- The device applies the change immediately and keeps it in RTC memory, so
-  it survives deep sleep (but not a full power loss or reflash).
-- The onboard LED blinks 3 times as a visual confirmation that a change
-  was picked up.
-- Changing `zones` also resets the device's memory of which zone it was
-  last in, so the very next reading gets freshly evaluated against the new
-  table and reported, even if the actual distance has not moved.
+```sh
+mosquitto_sub -h broker.hivemq.com \
+  -t "xiao/esp32c3/sensors/xiao01/#" -v
+```
 
-## Payload size
+## Live MQTT settings
 
-The MQTT packet limit is 512 bytes (`MQTT_MAX_PACKET_SIZE` in
-`network.h`). A message with all 5 zones plus distance_mm, light, and
-awake_ms comfortably fits. Raise that limit if the accepted payload
-format grows beyond it.
+Publish a retained JSON object to the threshold topic. Any subset of fields may
+be supplied:
 
-Subscribing to the device's messages
+```sh
+mosquitto_pub -h broker.hivemq.com -r \
+  -t "xiao/esp32c3/sensors/xiao01/threshold" \
+  -m '{"distance_mm":50,"light":100,"awake_ms":5000}'
+```
 
-Two topics carry information out of the device:
+If `MQTT_ACCESS_KEY` is non-empty, include the matching key:
 
-xiao/esp32c3/sensors/data, the sensor readings, published every time the device wakes up and connects. Not retained, so a new subscriber only sees new readings from that point on, not the last one that was sent.
-xiao/esp32c3/sensors/threshold, the same settings topic described above. It is retained, so subscribing to it (even without publishing anything yourself) immediately gets you the last settings that were sent, which is a handy way to check what is currently active.
-Quick look with mosquitto_sub
-mosquitto_sub -h broker.hivemq.com -t xiao/esp32c3/sensors/data -v
+```json
+{"key":"YOUR_KEY","distance_mm":50}
+```
 
-The -v flag prints the topic name alongside each message, useful once you subscribe to more than one topic at a time, for example with a wildcard that covers both:
+Supported fields:
 
-mosquitto_sub -h broker.hivemq.com -t "xiao/esp32c3/sensors/#" -v
-Parsing the payloads
+- `distance_mm`: distance delta that counts as sudden; default 100 mm.
+- `light`: light delta that counts as sudden; default 200 ADC counts.
+- `awake_ms`: idle duration of the active window; default 3000 ms.
+- `zones`: complete replacement distance-zone array.
 
-Both topics carry a plain JSON object with no extra framing, so any MQTT client library plus a JSON parser is enough to read them.
+Settings remain in RTC memory across deep sleep, but not across power loss or a
+firmware reset. Accepted changes cause the onboard LED to blink three times.
 
-Data topic fields:
+### Distance zones
 
-distance_mm, unsigned integer, latest distance reading in millimeters.
-light, integer, latest raw light sensor reading.
-switch_on, boolean, current slide-switch state. The device sends one final
-false value before sleeping when the switch is turned off.
-wake, unsigned integer, a wake cycle counter. If it jumps by more than 1 between messages you received, a wake happened that never made it to the broker, useful for spotting dropped connectivity.
+Example:
 
-Threshold topic fields: the same distance_mm, light, awake_ms, and zones fields described earlier in this document. This topic only carries a message when someone publishes a setting change, or when the broker replays the retained value to a client that just subscribed.
+```json
+{
+  "zones": [
+    {"max_mm":300,"label":"Close!"},
+    {"max_mm":600,"label":"Medium"},
+    {"max_mm":65535,"label":"Far.."}
+  ]
+}
+```
 
-Example subscriber in Python, using paho-mqtt:
+Rules:
 
-python
-import json
-import paho.mqtt.client as mqtt
+- Supply zones in ascending `max_mm` order; the firmware does not sort them.
+- Each non-final zone includes its `max_mm` boundary.
+- The final zone is a catch-all, so its `max_mm` is not used for matching.
+- A zones update replaces the entire table.
+- At most `MAX_ZONES` (currently 5) valid entries are stored.
+- Labels contain at most `ZONE_LABEL_LEN - 1` (currently 23) characters.
+- Malformed entries are skipped; an update with no valid entries is rejected.
 
-def on_message(client, userdata, msg):
-    try:
-        payload = json.loads(msg.payload)
-    except json.JSONDecodeError:
-        print(f"Could not parse message on {msg.topic}: {msg.payload!r}")
-        return
+The MQTT packet size is configured as 512 bytes in `include/network.h`.
 
-    if msg.topic.endswith("/data"):
-        print(f"Distance: {payload.get('distance_mm')} mm, "
-              f"Light: {payload.get('light')}, "
-              f"Wake: {payload.get('wake')}")
-    elif msg.topic.endswith("/threshold"):
-        print(f"Current settings: {payload}")
+## Firebase status history
 
-client = mqtt.Client()
-client.on_message = on_message
-client.connect("broker.hivemq.com", 1883)
-client.subscribe("xiao/esp32c3/sensors/#")
-client.loop_forever()
+Firebase stores an append-only device-status timeline rather than sensor
+readings. Records are created with HTTP `POST` at:
 
-Example data topic payload: {"distance_mm":280,"light":512,"wake":42}
+```text
+/devices/<MQTT_DEVICE_ID>/status/<generated-id>
+```
+
+During the active window, one record is attempted every second. One additional
+final record is posted when the window becomes idle or the switch turns off.
+Final records may be attempted up to `FIREBASE_FINAL_RETRY_COUNT` times
+(currently 3); normal active records use one attempt.
+
+Example record:
+
+```json
+{
+  "device_id": "xiao01",
+  "state": "active",
+  "switch_on": true,
+  "sensor_status": "ok",
+  "mqtt_connected": true,
+  "discord_status": "sent",
+  "wake": 42,
+  "timestamp": 1786600123000
+}
+```
+
+Possible `state` values are `active`, `idle`, and `switch_off`.
+Possible `sensor_status` values are `not_checked`, `not_detected`, `timeout`,
+and `ok`. Possible `discord_status` values are `not_sent`, `sent`, and `failed`.
+
+The timestamp is generated by Firebase server time in milliseconds. Because
+each record has a timestamp and state, this data is suitable for a long-period
+status bar chart or activity timeline.
+
+## Discord notifications
+
+Discord alerts are attempted for sudden sensor changes and distance-zone
+changes. A message includes the zone label, current distance, distance delta,
+current light value, and light delta:
+
+```text
+Close! (280 mm, change 125) | Light: 512 (change 40)
+```
+
+`lastZoneIndex` is updated only after Discord successfully returns a `2xx`
+status, allowing a failed zone notification to be retried.
+
+## Demo security notes
+
+MQTT currently uses an unencrypted public broker connection, and an empty
+access key disables command validation. Firebase and Discord call
+`setInsecure()`, so HTTPS traffic is encrypted but server certificates are not
+verified. These choices may be acceptable for a classroom demo but should be
+replaced with authenticated MQTT and trusted CA certificates for production.

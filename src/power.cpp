@@ -4,7 +4,6 @@
 #include <WiFi.h>
 #include <esp_sleep.h>
 
-/*Made by AI: chatGPT Codex*/
 void goToSleep(uint64_t microseconds)
 {
   mqttClient.disconnect();
