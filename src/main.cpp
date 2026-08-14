@@ -185,9 +185,7 @@ void publishSensor(uint16_t distanceMM, int lightRaw)
 void reportSwitchOff()
 {
   publishReadingsMQTT(lastDistanceMM, lastLightRaw, false);
-  switchOffReported = postFirebaseStatus(
-      "switch_off", false, distanceSensorStatus,
-      mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT);
+  switchOffReported = postFirebaseStatus("switch_off", false, distanceSensorStatus, mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT);
   if (switchOffReported) Serial.println("Final switch OFF state reported.");
   else Serial.println("Due to Firebase: Could not report switch OFF state - will retry next wake.");
 }
@@ -200,7 +198,7 @@ void tryReportSwitchOff()
   }
   else
   {
-    Serial.println("Could not report switch OFF state - will retry next wake.");
+    Serial.println("Offline: Could not report switch OFF state - will retry next wake.");
   }
 }
 

@@ -10,6 +10,7 @@ void goToSleep(uint64_t microseconds)
   WiFi.disconnect(true);
   esp_sleep_enable_timer_wakeup(microseconds);
   if (digitalRead(SWITCH_PIN) == LOW) esp_deep_sleep_enable_gpio_wakeup(1ULL << GPIO_NUM_5, ESP_GPIO_WAKEUP_GPIO_HIGH);
+  digitalWrite(LED_PIN, LOW);
   Serial.flush();
   esp_deep_sleep_start();
 }
@@ -24,5 +25,4 @@ void blinkLED(int times, uint16_t intervalMs)
     delay(intervalMs);
   }
 }
-
 
