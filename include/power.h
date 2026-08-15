@@ -3,10 +3,13 @@
 
 #include <Arduino.h>
 
-/* Disconnects MQTT/WiFi, turns off the LED, and puts the chip into deep sleep for the given duration. Never returns - the chip resets on wake and setup() runs again from the top. */
+// Disconnects MQTT/WiFi, turns off the LED, and puts the chip into deep sleep for the given duration. Never returns - the chip resets on wake and setup()
 void goToSleep(uint64_t microseconds);
 
-/* Blinks the LED, then restores it to ON (only ever called while we already know the switch is on). */
+// Blinks the LED, then restores it to ON (only ever called while we already know the switch is on).
 void blinkLED(int times, uint16_t intervalMs);
+
+// Toggles the retained power state after one continuous three-second hold.
+bool handlePowerButton();
 
 #endif // POWER_H

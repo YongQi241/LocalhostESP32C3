@@ -4,16 +4,16 @@
   "editor": "wokwi",
   "parts": [
     { "type": "board-xiao-esp32-c3", "id": "esp", "top": 100, "left": 100, "attrs": {} },
-    {
-      "type": "chip-vl53l1x",
-      "id": "chip1",
-      "top": 110,
-      "left": -30,
-      "rotate": 90,
-      "attrs": {}
-    },
+    { "type": "chip-vl53l1x", "id": "chip1", "top": 110, "left": -30, "rotate": 90, "attrs": {} },
     { "type": "chip-temt6000", "id": "chip2", "top": 0, "left": 90, "attrs": {} },
-    { "type": "wokwi-slide-switch", "id": "sw1", "top": 210, "left": 120, "attrs": {} },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": 220,
+      "left": 95,
+      "rotate": 90,
+      "attrs": { "color": "green", "label": "Power" }
+    },
     { "type": "wokwi-led", "id": "led1", "top": 45, "left": 200, "attrs": { "color": "red" } },
     {
       "type": "wokwi-resistor",
@@ -32,12 +32,11 @@
     [ "chip2:VCC", "esp:3V3", "red", [ "h-15", "v30", "h90", "v150" ] ],
     [ "chip2:GND", "esp:GND", "black", [ "v10", "h110", "v100" ] ],
     [ "chip2:OUT", "esp:D2", "orange", [ "h10", "v30", "h-110", "v90" ] ],
-    [ "sw1:1", "esp:3V3", "red", [ "v10", "h50", "v-120" ] ],
-    [ "sw1:3", "esp:GND", "black", [ "v15", "h50", "v-130" ] ],
     [ "led1:C", "esp:GND", "black", [ "v0" ] ],
     [ "led1:A", "r2:2", "green", [ "v0" ] ],
     [ "r2:1", "esp:D10", "green", [ "v0" ] ],
-    [ "sw1:2", "esp:D3", "green", [ "v15", "h-40", "v-110" ] ]
+    [ "btn1:2.l", "esp:D3", "green", [ "v-10", "h-30", "v-60" ] ],
+    [ "btn1:1.l", "esp:GND", "black", [ "v-10", "h40", "v-80" ] ]
   ],
   "dependencies": {}
 }

@@ -47,7 +47,9 @@ The included simulation uses `Wokwi-GUEST` with no Wi-Fi password.
 
 ## Device behavior
 
-While the switch is ON, the device wakes approximately every 2 seconds and
+Holding the Power button continuously LOW for 3 seconds toggles a retained
+ON/OFF state. Short presses are ignored. While the device is
+ON, it wakes approximately every 2 seconds and
 checks the sensors. It connects to the network when one of these conditions is
 true:
 
@@ -61,9 +63,9 @@ After connecting, the device enters an active window. Sensors are checked every
 further activity occurs for `awakeDurationMs` (default 3000 ms), the device posts
 an `idle` status and returns to deep sleep.
 
-While the switch is OFF, the device sends one final `switch_off` status and then
-wakes approximately every 5 seconds to check the switch. GPIO wakeup can also
-wake it when the switch is turned ON.
+When toggled OFF, the device sends one final `switch_off` status and then wakes
+approximately every 5 seconds. Pressing the button wakes it immediately and
+toggles it back ON. The state is kept in RTC memory across deep-sleep cycles.
 
 ## MQTT live readings
 
@@ -132,9 +134,9 @@ Example:
 ```json
 {
   "zones": [
-    {"max_mm":300,"label":"Close!"},
+    {"max_mm":300,"label":"Close"},
     {"max_mm":600,"label":"Medium"},
-    {"max_mm":65535,"label":"Far.."}
+    {"max_mm":65535,"label":"Far"}
   ]
 }
 ```
@@ -195,11 +197,13 @@ changes. A message includes the zone label, current distance, distance delta,
 current light value, and light delta:
 
 ```text
-Close! (280 mm, change 125) | Light: 512 (change 40)
+Close (280 mm, change 125) | Light: 512 (change 40)
 ```
 
-`lastZoneIndex` is updated only after Discord successfully returns a `2xx`
-status, allowing a failed zone notification to be retried.
+`lastZoneIndex` tracks the most recently observed zone. A separate
+`zoneNotificationPending` flag remains set until Discord successfully returns
+a `2xx` status, allowing delivery to be retried without treating the same
+physical zone as a new zone change on every wake.
 
 ## Demo security notes
 

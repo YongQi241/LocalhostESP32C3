@@ -18,9 +18,10 @@ extern PubSubClient mqttClient;
 // Your purpose is to blink LED
 extern bool settingsChanged;
 
-/*  Topics are derived from MQTT_DEVICE_ID as xiao/esp32c3/sensors/<MQTT_DEVICE_ID> 
-    Incoming mqtt must have a MQTT_ACCESS_KEY, else silently ignored. 
-    Live threshold/awake/zones updates are published (retained) to MQTT_TOPIC_THRESHOLD as JSON, e.g.: {"key":"MQTT_ACCESS_KEY","distance_mm":50,"light":100,"awake_ms":5000}
+/*  
+*   Topics are derived from MQTT_DEVICE_ID as xiao/esp32c3/sensors/<MQTT_DEVICE_ID> 
+*   Incoming mqtt must have a MQTT_ACCESS_KEY, else silently ignored. 
+*   Live threshold/awake/zones updates are published (retained) to MQTT_TOPIC_THRESHOLD as JSON, e.g.: {"key":"MQTT_ACCESS_KEY","distance_mm":50,"light":100,"awake_ms":5000}
 */
 
 bool connectWiFi();

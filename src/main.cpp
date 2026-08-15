@@ -41,32 +41,28 @@ bool distanceSensorAvailable = false;
 
 void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(9600);
   delay(100); // let USB-serial settle right after a deep-sleep reset
 
-  pinMode(SWITCH_PIN, INPUT);
+  pinMode(SWITCH_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
 
   wakeCount++;
 
-  const bool switchOn = digitalRead(SWITCH_PIN);
+  handlePowerButton();
 
-  // Send one final OFF report, then stop all activity while the switch is off.
-  if (!switchOn)
+  // Send one final OFF report, then stop all activity while toggled off.
+  if (!deviceEnabled)
   {
-    digitalWrite(LED_PIN, LOW);
     if (!switchOffReported)
-    {
       tryReportSwitchOff();
-    }
-    Serial.println("Switch OFF - sleeping.");
+    Serial.println("Device OFF - sleeping until the next check or button press.");
     goToSleep(SWITCH_OFF_INTERVAL_US);
     return; // unreachable: goToSleep() resets the chip
-  }
+  } else digitalWrite(LED_PIN, HIGH);
 
-  // Re-arm the one-time OFF report after the switch has been turned on.
+  // Re-arm the one-time OFF report after the device has been toggled on.
   switchOffReported = false;
-  digitalWrite(LED_PIN, HIGH);
 
   // Sensors
   Wire.begin(D4, D5); // VL53L1X: SDA=D4, SCL=D5
@@ -108,16 +104,21 @@ void setup()
 
   const int zoneIdx = zoneForDistance(distanceMM);
   const bool zoneChanged = (zoneIdx != lastZoneIndex);
-  const bool shouldNotify = suddenChange || zoneChanged; // distance jump, zone crossing, or a light jump = report
-  
+  if (zoneChanged && zoneIdx >= 0)
+  {
+    lastZoneIndex = zoneIdx;
+    zoneNotificationPending = true;
+  }
+  const bool shouldNotify = suddenChange || zoneNotificationPending;
+
   Serial.printf(
-      "Distance: %u mm (d=%d) | Light: %d (d=%d) | distSudden=%s lightSudden=%s heartbeat=%s zone=%s\n",
+      "Distance: %u mm (d=%d) | Light: %d (d=%d) | distSudden=%s lightSudden=%s heartbeat=%s zone=%s\r\n",
       distanceMM, distanceDelta, lightRaw, lightDelta,
       distanceSuddenChange ? "yes" : "no", lightSuddenChange ? "yes" : "no",
       heartbeatDue ? "yes" : "no",
       zoneIdx >= 0 ? zoneLabel[zoneIdx] : "n/a");
 
-  if (suddenChange || heartbeatDue || firstBoot || zoneChanged)
+  if (shouldNotify || heartbeatDue || firstBoot)
   {
     if (connectWiFi() && connectMQTT())
     {
@@ -130,7 +131,7 @@ void setup()
         discordStatus = discordSent ? "sent" : "failed";
         if (discordSent)
         {
-          lastZoneIndex = zoneIdx;
+          zoneNotificationPending = false;
         }
       }
 
@@ -138,7 +139,8 @@ void setup()
       publishSensor(distanceMM, lightRaw);
 
       // Loop replacement for control after deep sleep
-      runActiveWindow();
+      if (!firstBoot)
+        runActiveWindow();
     }
     else
     {
@@ -156,13 +158,16 @@ void setup()
     hasBaseline = true;
   }
 
-  // The switch or the settings may have changed during the active window so re-check before deciding sleep time.
-  const bool switchStillOn = digitalRead(SWITCH_PIN);
-  if (!switchStillOn && !switchOffReported)
+  handlePowerButton();
+  if (!deviceEnabled && !switchOffReported)
   {
     tryReportSwitchOff();
   }
-  goToSleep(switchStillOn ? CHECK_INTERVAL_US : SWITCH_OFF_INTERVAL_US);
+  Serial.println("Idling - entering deep sleep.");
+  digitalWrite(LED_PIN, LOW);
+  delay(1000);
+  digitalWrite(LED_PIN, HIGH);
+  goToSleep(deviceEnabled ? CHECK_INTERVAL_US : SWITCH_OFF_INTERVAL_US);
 }
 
 void loop()
@@ -173,7 +178,7 @@ void loop()
 // Publishes live sensor readings to MQTT.
 void publishSensor(uint16_t distanceMM, int lightRaw)
 {
-  publishReadingsMQTT(distanceMM, lightRaw, true);
+  publishReadingsMQTT(distanceMM, lightRaw, deviceEnabled);
 
   lastDistanceMM = distanceMM;
   lastLightRaw = lightRaw;
@@ -186,8 +191,10 @@ void reportSwitchOff()
 {
   publishReadingsMQTT(lastDistanceMM, lastLightRaw, false);
   switchOffReported = postFirebaseStatus("switch_off", false, distanceSensorStatus, mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT);
-  if (switchOffReported) Serial.println("Final switch OFF state reported.");
-  else Serial.println("Due to Firebase: Could not report switch OFF state - will retry next wake.");
+  if (switchOffReported)
+    Serial.println("Final switch OFF state reported.");
+  else
+    Serial.println("Due to Firebase: Could not report switch OFF state - will retry next wake.");
 }
 
 void tryReportSwitchOff()
@@ -207,14 +214,11 @@ void runActiveWindow()
 {
   uint32_t lastFirebasePost = millis();
   uint32_t lastActivity = millis(); // reset on every sudden change; window ends when this goes stale
-  int observedZoneIndex = lastZoneIndex;
 
   while (millis() - lastActivity < awakeDurationMs)
   {
-    if (digitalRead(SWITCH_PIN) == LOW)
+    if (handlePowerButton())
     {
-      Serial.println("Switch turned OFF mid-window - stopping early.");
-      digitalWrite(LED_PIN, LOW);
       if (!switchOffReported)
       {
         reportSwitchOff();
@@ -248,24 +252,26 @@ void runActiveWindow()
     const bool suddenChange = distanceSuddenChange || lightSuddenChange;
     const int zoneIdx = sensorOk ? zoneForDistance(distanceMM) : -1;
     const bool zoneChanged = sensorOk && (zoneIdx != lastZoneIndex);
-    const bool observedZoneChanged = sensorOk && (zoneIdx != observedZoneIndex);
-    const bool shouldNotify = suddenChange || zoneChanged;
+    if (zoneChanged)
+    {
+      lastZoneIndex = zoneIdx;
+      zoneNotificationPending = true;
+    }
+    const bool shouldNotify = suddenChange || zoneNotificationPending;
 
-    // Preserve the previous zone after a failed Discord request so it can retry.
     if (shouldNotify && zoneIdx >= 0)
     {
-      Serial.printf("Zone notification during active window -> %s\n", zoneLabel[zoneIdx]);
+      Serial.printf("Zone notification during active window -> %s\r\n", zoneLabel[zoneIdx]);
       const bool discordSent = sendDiscordAlert(distanceMM, distanceDelta, zoneIdx, lightRaw, lightDelta);
       discordStatus = discordSent ? "sent" : "failed";
       if (discordSent)
       {
-        lastZoneIndex = zoneIdx;
+        zoneNotificationPending = false;
       }
     }
 
-    if (observedZoneChanged)
+    if (zoneChanged)
     {
-      observedZoneIndex = zoneIdx;
       lastActivity = millis();
     }
 
@@ -290,6 +296,12 @@ void runActiveWindow()
     {
       lastFirebasePost = millis();
       postFirebaseStatus("active", true, distanceSensorStatus, mqttClient.connected(), discordStatus);
+      if (!deviceEnabled)
+      {
+        Serial.println("Firebase attempt interrupted by button - stopping active window.");
+        digitalWrite(LED_PIN, LOW);
+        return;
+      }
     }
 
     delay(ACTIVE_LOOP_DELAY_MS);

@@ -18,5 +18,6 @@ extern int      lightThreshold;      // live-configurable "sudden" for light
 extern uint32_t awakeDurationMs;     // live-configurable idle timeout for the active window
 extern uint32_t wakeCount;           // increments every wake, used for the heartbeat and "wake" field
 extern bool     switchOffReported;   // prevents duplicate OFF reports on timer wakes
+extern bool     deviceEnabled;       // button-latched power state
 
 #endif // STATE_H

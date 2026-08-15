@@ -5,7 +5,8 @@
 
 // ---------------- Pin configuration ----------------
 constexpr int LIGHT_PIN  = D2;  // TEMT6000 OUT
-constexpr int SWITCH_PIN = D3;  // Slide-switch center (RTC-capable, enables ext0 wakeup)
+constexpr int SWITCH_PIN = D3;  // Active-low pushbutton (RTC-capable, enables GPIO wakeup)
+constexpr uint32_t BUTTON_HOLD_MS = 1000;
 constexpr int LED_PIN    = D10;
 
 // ---------------- Timing ----------------

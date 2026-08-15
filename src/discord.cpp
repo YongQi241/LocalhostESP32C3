@@ -27,8 +27,8 @@ bool sendDiscordAlert(uint16_t distanceMM, int distanceDelta, int zoneIndex, int
 
   const int status = http.POST(content);
   const bool ok = status >= 200 && status < 300;
-  if (ok) Serial.printf("Discord status: %d\n", status);
-  else Serial.printf("Discord failed (%d): %s\n", status, http.errorToString(status).c_str());
+  if (ok) Serial.printf("Discord status: %d\r\n", status);
+  else Serial.printf("Discord failed (%d): %s\r\n", status, http.errorToString(status).c_str());
 
   http.end();
   return ok;
