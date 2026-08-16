@@ -41,7 +41,7 @@ bool distanceSensorAvailable = false;
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(100); // let USB-serial settle right after a deep-sleep reset
 
   pinMode(SWITCH_PIN, INPUT_PULLUP);
@@ -129,18 +129,14 @@ void setup()
       {
         const bool discordSent = sendDiscordAlert(distanceMM, distanceDelta, zoneIdx, lightRaw, lightDelta);
         discordStatus = discordSent ? "sent" : "failed";
-        if (discordSent)
-        {
-          zoneNotificationPending = false;
-        }
+        if (discordSent) zoneNotificationPending = false;
       }
 
       // Updates lastDistanceMM/lastLightRaw, the baseline the active window compares against.
       publishSensor(distanceMM, lightRaw);
 
       // Loop replacement for control after deep sleep
-      if (!firstBoot)
-        runActiveWindow();
+      if (!firstBoot) runActiveWindow();
     }
     else
     {
@@ -163,6 +159,10 @@ void setup()
   {
     tryReportSwitchOff();
   }
+  if (deviceEnabled && mqttClient.connected())
+  {
+    publishReadingsMQTT(lastDistanceMM, lastLightRaw, true, "idle", distanceSensorStatus);
+  }
   Serial.println("Idling - entering deep sleep.");
   digitalWrite(LED_PIN, LOW);
   delay(1000);
@@ -178,7 +178,7 @@ void loop()
 // Publishes live sensor readings to MQTT.
 void publishSensor(uint16_t distanceMM, int lightRaw)
 {
-  publishReadingsMQTT(distanceMM, lightRaw, deviceEnabled);
+  publishReadingsMQTT(distanceMM, lightRaw, deviceEnabled, "active", distanceSensorStatus);
 
   lastDistanceMM = distanceMM;
   lastLightRaw = lightRaw;
@@ -189,8 +189,9 @@ void publishSensor(uint16_t distanceMM, int lightRaw)
 // The RTC flag ensures an unchanged OFF switch does not report every timer wake.
 void reportSwitchOff()
 {
-  publishReadingsMQTT(lastDistanceMM, lastLightRaw, false);
+  publishReadingsMQTT(lastDistanceMM, lastLightRaw, false, "switch_off", distanceSensorStatus);
   switchOffReported = postFirebaseStatus("switch_off", false, distanceSensorStatus, mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT);
+  
   if (switchOffReported)
     Serial.println("Final switch OFF state reported.");
   else
@@ -199,14 +200,8 @@ void reportSwitchOff()
 
 void tryReportSwitchOff()
 {
-  if (mqttClient.connected() || (connectWiFi() && connectMQTT()))
-  {
-    reportSwitchOff();
-  }
-  else
-  {
-    Serial.println("Offline: Could not report switch OFF state - will retry next wake.");
-  }
+  if (mqttClient.connected() || (connectWiFi() && connectMQTT())) reportSwitchOff();
+  else Serial.println("Offline: Could not report switch OFF state - will retry next wake.");
 }
 
 // Loop design to handle đeepsleep to conserve battery as much as possible.
@@ -219,10 +214,7 @@ void runActiveWindow()
   {
     if (handlePowerButton())
     {
-      if (!switchOffReported)
-      {
-        reportSwitchOff();
-      }
+      if (!switchOffReported) reportSwitchOff();
       return;
     }
 
@@ -264,16 +256,10 @@ void runActiveWindow()
       Serial.printf("Zone notification during active window -> %s\r\n", zoneLabel[zoneIdx]);
       const bool discordSent = sendDiscordAlert(distanceMM, distanceDelta, zoneIdx, lightRaw, lightDelta);
       discordStatus = discordSent ? "sent" : "failed";
-      if (discordSent)
-      {
-        zoneNotificationPending = false;
-      }
+      if (discordSent) zoneNotificationPending = false;
     }
 
-    if (zoneChanged)
-    {
-      lastActivity = millis();
-    }
+    if (zoneChanged) lastActivity = millis();
 
     if (suddenChange)
     {
@@ -281,10 +267,7 @@ void runActiveWindow()
       lastActivity = millis();
     }
 
-    if (sensorOk)
-    {
-      publishSensor(distanceMM, lightRaw);
-    }
+    if (sensorOk) publishSensor(distanceMM, lightRaw);
     else
     {
       // Distance is unavailable, but light monitoring can continue.
@@ -308,7 +291,5 @@ void runActiveWindow()
   }
 
   if (!postFirebaseStatus("idle", true, distanceSensorStatus, mqttClient.connected(), discordStatus, FIREBASE_FINAL_RETRY_COUNT))
-  {
     Serial.println("Firebase: final idle status was not reported.");
-  }
 }

@@ -16,10 +16,7 @@ bool connectWiFi()
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   const uint32_t start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS)
-  {
-    delay(100);
-  }
+  while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) delay(100);
 
   if (WiFi.status() == WL_CONNECTED)
   {
@@ -125,10 +122,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
         Serial.println("Zones message has more entries than MAX_ZONES - extra ones ignored.");
         break;
       }
-      if (!z["max_mm"].is<uint16_t>() || !z["label"].is<const char *>())
-      {
-        continue; // skip malformed entries
-      }
+      if (!z["max_mm"].is<uint16_t>() || !z["label"].is<const char *>()) continue; // skip malformed entries
+
       zoneMaxMM[newCount] = z["max_mm"].as<uint16_t>();
       strlcpy(zoneLabel[newCount], z["label"].as<const char *>(), ZONE_LABEL_LEN);
       newCount++;
@@ -139,10 +134,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
       lastZoneIndex = -1; // re-evaluate against the new table, incase the old zone don't line up
       changed = true;
     }
-    else
-    {
-      Serial.println("Zones message had no valid entries - table left unchanged.");
-    }
+    else Serial.println("Zones message had no valid entries - table left unchanged.");
   }
 
   if (changed)
@@ -152,13 +144,15 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
   }
 }
 
-void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn)
+void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn, const char *state, const char *sensorStatus)
 {
   JsonDocument doc;
   doc["id"] = MQTT_DEVICE_ID;
   doc["distance_mm"] = distanceMM;
   doc["light"] = lightRaw;
   doc["switch_on"] = switchOn;
+  doc["state"] = state;
+  doc["sensor_status"] = sensorStatus;
   doc["wake"] = wakeCount;
 
   String payload;
@@ -170,8 +164,5 @@ void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn)
     Serial.print("MQTT published: ");
     Serial.println(payload);
   }
-  else
-  {
-    Serial.println("MQTT publish failed.");
-  }
+  else Serial.println("MQTT publish failed.");
 }

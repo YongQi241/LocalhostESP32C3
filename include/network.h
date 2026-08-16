@@ -4,11 +4,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
-// PubSubClient defaults to a 256 byte MQTT packet limit. A "zones" update
-// with several entries can exceed that, so raise it before including the
-// header (must be defined before the #include, PubSubClient only applies
-// it if nothing else set it first). Every file that includes network.h
-// gets PubSubClient.h pulled in with this same limit already applied.
+// PubSubClient defaults to a 256 byte MQTT packet limit. A "zones" update can exceed that, so raise it before including the header.
 #define MQTT_MAX_PACKET_SIZE 512
 #include <PubSubClient.h>
 
@@ -29,6 +25,6 @@ bool connectMQTT();
 void mqttCallback(char *topic, byte *payload, unsigned int length);
 
 // Publishes distance, light, and switch state as a retained reading.
-void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn);
+void publishReadingsMQTT(uint16_t distanceMM, int lightRaw, bool switchOn, const char *state, const char *sensorStatus);
 
 #endif // NETWORK_H

@@ -84,11 +84,16 @@ The data topic carries live sensor readings:
   "distance_mm": 280,
   "light": 512,
   "switch_on": true,
+  "state": "active",
+  "sensor_status": "ok",
   "wake": 42
 }
 ```
 
 Data messages are retained, so a new subscriber receives the latest state.
+The `state` field is `active`, `idle`, or `switch_off`; `sensor_status` is
+`not_checked`, `not_detected`, `timeout`, or `ok`. Before sleeping, the device
+publishes an `idle` update using the most recent sensor readings.
 The device publishes once when the active session begins and then after each
 valid distance sample during the active window (nominally every 250 ms, plus
 network-processing time). A final retained message sets `switch_on` to `false`.
