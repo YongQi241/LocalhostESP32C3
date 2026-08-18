@@ -44,7 +44,7 @@ void setup()
   Serial.begin(115200);
   delay(100); // let USB-serial settle right after a deep-sleep reset
 
-  pinMode(SWITCH_PIN, INPUT_PULLUP);
+  pinMode(SWITCH_PIN, INPUT_PULLUP); //HIGH default, pratical incase for stray voltage via direct inner connection
   pinMode(LED_PIN, OUTPUT);
 
   wakeCount++;
@@ -73,10 +73,10 @@ void setup()
   {
     distanceSensorAvailable = true;
     distanceSensorStatus = "ok";
-    distanceSensor.setDistanceMode(VL53L1X::Short);
-    distanceSensor.setMeasurementTimingBudget(50000);
-    distanceSensor.startContinuous(50);
-    distanceMM = distanceSensor.read(); // blocks briefly for the first sample
+    distanceSensor.setDistanceMode(VL53L1X::Short); // Ambient light immunity, longer the worst
+    distanceSensor.setMeasurementTimingBudget(50000); // 50ms collecting light for 1 mea
+    distanceSensor.startContinuous(55); // Auto read 55ms // normal pull latest
+    distanceMM = distanceSensor.read(); // sample
     if (distanceSensor.timeoutOccurred())
     {
       distanceSensorStatus = "timeout";

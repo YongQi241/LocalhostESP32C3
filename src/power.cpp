@@ -5,10 +5,6 @@
 #include <WiFi.h>
 #include <esp_sleep.h>
 
-static void waitForButtonRelease()
-{
-  while (digitalRead(SWITCH_PIN) == LOW) delay(10);
-}
 
 bool handlePowerButton()
 {
@@ -25,8 +21,8 @@ bool handlePowerButton()
   digitalWrite(LED_PIN, deviceEnabled ? HIGH : LOW);
   Serial.printf("Button held for 2 seconds - device %s.\r\n", deviceEnabled ? "ON" : "OFF");
 
-  // ONE ONLY
-  waitForButtonRelease();
+  // ONE ONLY, wait for button to release
+  while (digitalRead(SWITCH_PIN) == LOW) delay(10);
   return true;
 }
 
@@ -36,7 +32,8 @@ void goToSleep(uint64_t microseconds)
   WiFi.disconnect(true);
   esp_sleep_enable_timer_wakeup(microseconds);
   // Do not enter level-triggered GPIO sleep while the button is still held.
-  waitForButtonRelease();
+  // Wait for button to release / insurance
+  while (digitalRead(SWITCH_PIN) == LOW) delay(10);
   esp_deep_sleep_enable_gpio_wakeup(1ULL << GPIO_NUM_5, ESP_GPIO_WAKEUP_GPIO_LOW);
   digitalWrite(LED_PIN, LOW);
   Serial.flush();

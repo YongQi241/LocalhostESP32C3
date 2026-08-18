@@ -139,7 +139,7 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
 
   if (changed)
   {
-    settingsChanged = true; // consumed by runActiveWindow() to trigger the confirmation blink
+    settingsChanged = true; // consumed by runActiveWindow() to blink
     Serial.printf("Settings updated -> distance: %u mm, light: %d, awake: %lu ms\r\n", distanceThresholdMM, lightThreshold, (unsigned long)awakeDurationMs);
   }
 }
