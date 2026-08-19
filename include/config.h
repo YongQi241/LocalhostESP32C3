@@ -19,7 +19,7 @@ constexpr uint32_t ACTIVE_LOOP_DELAY_MS    = 250;                 // how often s
 constexpr uint32_t FIREBASE_STATUS_INTERVAL_MS = 1000;            // append device status while awake
 constexpr int      FIREBASE_FINAL_RETRY_COUNT = 3;
 constexpr int      SETTINGS_BLINK_COUNT    = 3;                   // LED blinks to confirm a threshold/awake setting change
-constexpr uint16_t SETTINGS_BLINK_MS       = 100;                 // on/off duration per blink
+constexpr uint16_t SETTINGS_BLINK_MS       = 1000;                 // on/off duration per blink
 
 // ---------------- Distance zones ----------------
 constexpr int      MAX_ZONES      = 5;   // cap on how many zones the "zones" MQTT field can set

@@ -112,8 +112,8 @@ void setup()
   const bool shouldNotify = suddenChange || zoneNotificationPending;
 
   Serial.printf(
-      "Distance: %u mm (d=%d) | Light: %d (d=%d) | distSudden=%s lightSudden=%s heartbeat=%s zone=%s\r\n",
-      distanceMM, distanceDelta, lightRaw, lightDelta,
+      "Distance: %u mm (d=%d) | Light: %d (d=%d) | Thresholds: dist=%u, light=%d | distSudden=%s lightSudden=%s heartbeat=%s zone=%s\r\n",
+      distanceMM, distanceDelta, lightRaw, lightDelta, distanceThresholdMM, lightThreshold,
       distanceSuddenChange ? "yes" : "no", lightSuddenChange ? "yes" : "no",
       heartbeatDue ? "yes" : "no",
       zoneIdx >= 0 ? zoneLabel[zoneIdx] : "n/a");

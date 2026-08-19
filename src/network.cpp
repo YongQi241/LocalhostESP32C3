@@ -44,6 +44,7 @@ bool connectMQTT()
     if (ok)
     {
       Serial.println("MQTT connected.");
+      mqttClient.subscribe(MQTT_TOPIC_THRESHOLD.c_str());
       return true;
     }
     delay(200);
@@ -58,6 +59,8 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
 {
   if (MQTT_TOPIC_THRESHOLD != topic)
   {
+    Serial.print("MQTT message on unexpected topic: ");
+    Serial.println(topic);
     return;
   }
 
