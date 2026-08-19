@@ -22,7 +22,11 @@ bool handlePowerButton()
   Serial.printf("Button held for 2 seconds - device %s.\r\n", deviceEnabled ? "ON" : "OFF");
 
   // ONE ONLY, wait for button to release
-  while (digitalRead(SWITCH_PIN) == LOW) delay(10);
+  while (digitalRead(SWITCH_PIN) == LOW) 
+  {
+    Serial.printf("Waiting for release\r\n");
+    delay(100);
+  }
   return true;
 }
 

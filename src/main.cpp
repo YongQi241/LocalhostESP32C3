@@ -50,15 +50,18 @@ void setup()
   wakeCount++;
 
   handlePowerButton();
-
+      
   // Send one final OFF report, then stop all activity while toggled off.
   if (!deviceEnabled)
   {
-    if (!switchOffReported)
-      tryReportSwitchOff();
-    Serial.println("Device OFF - sleeping until the next check or button press.");
-    goToSleep(SWITCH_OFF_INTERVAL_US);
-    return; // unreachable: goToSleep() resets the chip
+    if (!switchOffReported) tryReportSwitchOff();
+    if (!deviceEnabled)
+    {
+      Serial.println("Device OFF - sleeping until the next check or button press.");
+      goToSleep(SWITCH_OFF_INTERVAL_US);
+      return; // unreachable: goToSleep() resets the chip
+    }
+    Serial.println("Device turned ON during OFF reporting - continuing startup.");
   } else digitalWrite(LED_PIN, HIGH);
 
   // Re-arm the one-time OFF report after the device has been toggled on.
@@ -153,20 +156,12 @@ void setup()
     lastLightRaw = lightRaw;
     hasBaseline = true;
   }
-
-  handlePowerButton();
-  if (!deviceEnabled && !switchOffReported)
-  {
-    tryReportSwitchOff();
-  }
-  if (deviceEnabled && mqttClient.connected())
-  {
-    publishReadingsMQTT(lastDistanceMM, lastLightRaw, true, "idle", distanceSensorStatus);
-  }
+  
+  if (!deviceEnabled && !switchOffReported) tryReportSwitchOff();
+  if (deviceEnabled && mqttClient.connected()) publishReadingsMQTT(lastDistanceMM, lastLightRaw, true, "idle", distanceSensorStatus);
+  
   Serial.println("Idling - entering deep sleep.");
   digitalWrite(LED_PIN, LOW);
-  delay(1000);
-  digitalWrite(LED_PIN, HIGH);
   goToSleep(deviceEnabled ? CHECK_INTERVAL_US : SWITCH_OFF_INTERVAL_US);
 }
 
@@ -195,7 +190,7 @@ void reportSwitchOff()
   if (switchOffReported)
     Serial.println("Final switch OFF state reported.");
   else
-    Serial.println("Due to Firebase: Could not report switch OFF state - will retry next wake.");
+    Serial.println("Firebase: Could not report switch OFF state - will retry next wake.");
 }
 
 void tryReportSwitchOff()

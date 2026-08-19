@@ -10,10 +10,6 @@
 bool postFirebaseStatus(const char *state, bool switchOn, const char *sensorStatus, bool mqttConnected, const char *discordStatus, int maxAttempts)
 {
 
-  auto powerChangedByButton = []() {
-    return handlePowerButton();
-  };
-
   JsonDocument doc;
   doc["device_id"] = MQTT_DEVICE_ID;
   doc["state"] = state;
@@ -29,7 +25,7 @@ bool postFirebaseStatus(const char *state, bool switchOn, const char *sensorStat
 
   for (int attempt = 1; attempt <= maxAttempts; attempt++)
   {
-    if (powerChangedByButton()) return false;
+    if (handlePowerButton()) return false;
 
     WiFiClientSecure client;
     client.setInsecure(); // TLS certificate is not verified
@@ -50,7 +46,7 @@ bool postFirebaseStatus(const char *state, bool switchOn, const char *sensorStat
     }
 
     // HTTPClient::POST is synchronous, so check immediately when it returns.
-    if (powerChangedByButton()) return false;
+    if (handlePowerButton()) return false;
 
     if (status >= 200 && status < 300)
     {
@@ -65,7 +61,7 @@ bool postFirebaseStatus(const char *state, bool switchOn, const char *sensorStat
       const uint32_t retryStart = millis();
       while (millis() - retryStart < 250)
       {
-        if (powerChangedByButton()) return false;
+        if (handlePowerButton()) return false;
         delay(10);
       }
     }
